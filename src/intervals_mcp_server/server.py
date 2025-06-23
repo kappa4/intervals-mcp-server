@@ -149,7 +149,7 @@ async def make_intervals_request(
     """
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
-    if method == "POST":
+    if method in ["POST", "PUT"]:
         headers["Content-Type"] = "application/json"
 
     # Use provided api_key or fall back to global API_KEY
@@ -158,7 +158,7 @@ async def make_intervals_request(
     full_url = f"{INTERVALS_API_BASE_URL}{url}"
 
     try:
-        if method == "POST" and data is not None:
+        if method in ["POST", "PUT"] and data is not None:
             response = await httpx_client.request(
                 method=method,
                 url=full_url,
@@ -508,7 +508,7 @@ async def get_event_by_id(
 
     # Call the Intervals.icu API
     result = await make_intervals_request(
-        url=f"/athlete/{athlete_id_to_use}/event/{event_id}", api_key=api_key
+        url=f"/athlete/{athlete_id_to_use}/events/{event_id}", api_key=api_key
     )
 
     if isinstance(result, dict) and "error" in result:
@@ -740,6 +740,90 @@ async def add_events(  # pylint: disable=too-many-arguments,too-many-locals,too-
         except ValueError as e:
             message = f"Error: {e}"
     return message
+
+
+@mcp.tool()
+async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
+    event_id: str,
+    athlete_id: str | None = None,
+    api_key: str | None = None,
+    start_date: str | None = None,
+    name: str | None = None,
+    description: str | None = None,
+    workout_type: str | None = None,
+    moving_time: int | None = None,
+    distance: int | None = None,
+) -> str:
+    """Update an existing event in Intervals.icu.
+
+    This function updates an event using the PUT /api/v1/athlete/{id}/events/{eventId} endpoint.
+    Only the provided fields will be updated.
+
+    Args:
+        event_id: The Intervals.icu event ID (required).
+        athlete_id: The Intervals.icu athlete ID (optional, will use ATHLETE_ID from .env if not provided).
+        api_key: The Intervals.icu API key (optional, will use API_KEY from .env if not provided).
+        start_date: Start date in YYYY-MM-DD or ISO8601 format (optional).
+        name: Name of the activity (optional).
+        description: Description of the activity including steps (optional).
+        workout_type: Workout type (Run, Ride, Swim, etc.) (optional).
+        moving_time: Total expected moving time of the workout in seconds (optional).
+        distance: Total expected distance of the workout in meters (optional).
+    """
+    athlete_id_to_use = athlete_id if athlete_id is not None else ATHLETE_ID
+    if not athlete_id_to_use:
+        return "Error: No athlete ID provided and no default ATHLETE_ID found in environment variables."
+
+    # Fetch the existing event to get its current data
+    existing_event = await make_intervals_request(
+        url=f"/athlete/{athlete_id_to_use}/events/{event_id}", api_key=api_key
+    )
+
+    if isinstance(existing_event, dict) and "error" in existing_event:
+        return f"Error fetching existing event: {existing_event.get('message', 'Unknown error')}"
+
+    if not isinstance(existing_event, dict):
+        return f"Could not retrieve existing event {event_id}."
+
+    # Build the update payload with only the specified fields
+    update_data = {}
+    if start_date:
+        update_data["start_date_local"] = _format_start_date(start_date)
+    if name:
+        update_data["name"] = name
+    if description:
+        update_data["description"] = description
+    if workout_type:
+        update_data["type"] = workout_type
+    elif name and not workout_type:
+        # If name is updated but type isn't, try to resolve type from new name
+        update_data["type"] = _resolve_workout_type(name, None)
+    if moving_time is not None:
+        update_data["moving_time"] = moving_time
+    if distance is not None:
+        update_data["distance"] = distance
+
+    if not update_data:
+        return "Error: No fields provided to update."
+
+    # Merge existing data with update data
+    final_data = {**existing_event, **update_data}
+
+    result = await make_intervals_request(
+        url=f"/athlete/{athlete_id_to_use}/events/{event_id}",
+        api_key=api_key,
+        data=final_data,
+        method="PUT",
+    )
+
+    if isinstance(result, dict) and "error" in result:
+        error_message = result.get("message", "Unknown error")
+        return f"Error updating event: {error_message}, data used: {final_data}"
+
+    if isinstance(result, dict):
+        return f"Successfully updated event: {json.dumps(result, indent=2)}"
+
+    return f"Event {event_id} updated successfully."
 
 
 # Run the server

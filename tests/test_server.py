@@ -29,6 +29,7 @@ from intervals_mcp_server.server import (  # pylint: disable=wrong-import-positi
     get_wellness_data,
     get_activity_intervals,
     add_events,
+    update_event,
 )
 from tests.sample_data import INTERVALS_DATA  # pylint: disable=wrong-import-position
 
@@ -156,23 +157,16 @@ def test_get_activity_intervals(monkeypatch):
 
 def test_add_events(monkeypatch):
     """
-    Test add_events successfully posts an event and returns the response data.
+    Test add_events successfully creates an event and returns the response data.
     """
     expected_response = {
         "id": "e123",
-        "start_date_local": "2024-01-15T00:00:00",
-        "category": "WORKOUT",
         "name": "Test Workout",
-        "type": "Ride",
+        "start_date_local": "2024-01-15T00:00:00",
     }
 
     sample_data = {
-        "steps": [
-            {"duration": "15m", "target": "80%", "description": "Warm-up"},
-            {"duration": "3m", "target": "110%", "description": "High-intensity interval"},
-            {"duration": "3m", "target": "80%", "description": "Recovery"},
-            {"duration": "10m", "target": "80%", "description": "Cool-down"},
-        ]
+        "description": "- 15m 80% Warm-up\\n- 3m 110% High-intensity interval\\n- 3m 80% Recovery\\n- 10m 80% Cool-down"
     }
 
     async def fake_post_request(*_args, **_kwargs):
@@ -180,8 +174,68 @@ def test_add_events(monkeypatch):
 
     monkeypatch.setattr("intervals_mcp_server.server.make_intervals_request", fake_post_request)
     result = asyncio.run(
-        add_events(athlete_id="i1", start_date="2024-01-15", name="Test Workout", **sample_data)
+        add_events(
+            athlete_id="i1",
+            start_date="2024-01-15",
+            name="Test Workout",
+            description=sample_data["description"],
+        )
     )
     assert "Successfully created event:" in result
     assert '"id": "e123"' in result
     assert '"name": "Test Workout"' in result
+
+
+def test_update_event(monkeypatch):
+    """
+    Test update_event successfully updates an event and returns the response data.
+    """
+    existing_event_data = {
+        "id": "e123",
+        "start_date_local": "2024-01-15T00:00:00",
+        "category": "WORKOUT",
+        "name": "Old Workout",
+        "type": "Ride",
+        "description": "An old workout",
+    }
+
+    updated_name = "Updated Workout Name"
+    updated_description = "A new and improved workout."
+
+    # This will be the final state returned by the API after PUT
+    final_event_data = {
+        **existing_event_data,
+        "name": updated_name,
+        "description": updated_description,
+    }
+
+    async def fake_request(url, **kwargs):
+        method = kwargs.get("method", "GET")
+        if method == "GET" and url.endswith("/events/e123"):
+            return existing_event_data
+        if method == "PUT" and url.endswith("/events/e123"):
+            # The real API would return the full updated object
+            return final_event_data
+        # Should not happen in this test
+        return {"error": True, "message": "Unexpected API call in mock"}
+
+    monkeypatch.setattr("intervals_mcp_server.server.make_intervals_request", fake_request)
+
+    result = asyncio.run(
+        update_event(
+            event_id="e123",
+            athlete_id="i1",
+            name=updated_name,
+            description=updated_description,
+        )
+    )
+
+    assert "Successfully updated event:" in result
+    assert '"id": "e123"' in result
+    assert f'"name": "{updated_name}"' in result
+    assert f'"description": "{updated_description}"' in result
+
+
+# Run the server
+if __name__ == "__main__":
+    mcp.run()
