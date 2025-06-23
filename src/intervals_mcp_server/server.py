@@ -149,7 +149,7 @@ async def make_intervals_request(
     """
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
-    if method in ["POST", "PUT"]:
+    if method in ["POST", "PUT", "DELETE"]:
         headers["Content-Type"] = "application/json"
 
     # Use provided api_key or fall back to global API_KEY
@@ -824,6 +824,38 @@ async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,to
         return f"Successfully updated event: {json.dumps(result, indent=2)}"
 
     return f"Event {event_id} updated successfully."
+
+
+@mcp.tool()
+async def delete_event(
+    event_id: str,
+    athlete_id: str | None = None,
+    api_key: str | None = None,
+) -> str:
+    """Delete an existing event from Intervals.icu.
+
+    This function deletes an event using the DELETE /api/v1/athlete/{id}/events/{eventId} endpoint.
+
+    Args:
+        event_id: The Intervals.icu event ID (required).
+        athlete_id: The Intervals.icu athlete ID (optional, will use ATHLETE_ID from .env if not provided).
+        api_key: The Intervals.icu API key (optional, will use API_KEY from .env if not provided).
+    """
+    athlete_id_to_use = athlete_id if athlete_id is not None else ATHLETE_ID
+    if not athlete_id_to_use:
+        return "Error: No athlete ID provided and no default ATHLETE_ID found in environment variables."
+
+    result = await make_intervals_request(
+        url=f"/athlete/{athlete_id_to_use}/events/{event_id}",
+        api_key=api_key,
+        method="DELETE",
+    )
+
+    if isinstance(result, dict) and "error" in result:
+        error_message = result.get("message", "Unknown error")
+        return f"Error deleting event: {error_message}"
+
+    return f"Event {event_id} deleted successfully."
 
 
 # Run the server
