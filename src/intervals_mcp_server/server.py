@@ -584,6 +584,15 @@ async def get_wellness_data(
     return wellness_summary
 
 
+def _format_start_date(start_date: str) -> str:
+    """Format start_date to ensure proper ISO8601 format."""
+    if "T" in start_date:
+        # Already includes time, return as-is
+        return start_date
+    # Date only, append T00:00:00
+    return start_date + "T00:00:00"
+
+
 def _resolve_workout_type(name: str | None, workout_type: str | None) -> str:
     """Determine the workout type based on the name and provided value."""
     if workout_type:
@@ -705,7 +714,7 @@ async def add_events(  # pylint: disable=too-many-arguments,too-many-locals,too-
         try:
             resolved_workout_type = _resolve_workout_type(name, workout_type)
             final_data = {
-                "start_date_local": start_date + "T00:00:00",
+                "start_date_local": _format_start_date(start_date),
                 "category": "WORKOUT",
                 "name": name,
                 "description": description,
