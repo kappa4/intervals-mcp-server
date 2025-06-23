@@ -156,23 +156,16 @@ def test_get_activity_intervals(monkeypatch):
 
 def test_add_events(monkeypatch):
     """
-    Test add_events successfully posts an event and returns the response data.
+    Test add_events successfully creates an event and returns the response data.
     """
     expected_response = {
         "id": "e123",
-        "start_date_local": "2024-01-15T00:00:00",
-        "category": "WORKOUT",
         "name": "Test Workout",
-        "type": "Ride",
+        "start_date_local": "2024-01-15T00:00:00",
     }
 
     sample_data = {
-        "steps": [
-            {"duration": "15m", "target": "80%", "description": "Warm-up"},
-            {"duration": "3m", "target": "110%", "description": "High-intensity interval"},
-            {"duration": "3m", "target": "80%", "description": "Recovery"},
-            {"duration": "10m", "target": "80%", "description": "Cool-down"},
-        ]
+        "description": "- 15m 80% Warm-up\\n- 3m 110% High-intensity interval\\n- 3m 80% Recovery\\n- 10m 80% Cool-down"
     }
 
     async def fake_post_request(*_args, **_kwargs):
@@ -180,8 +173,18 @@ def test_add_events(monkeypatch):
 
     monkeypatch.setattr("intervals_mcp_server.server.make_intervals_request", fake_post_request)
     result = asyncio.run(
-        add_events(athlete_id="i1", start_date="2024-01-15", name="Test Workout", **sample_data)
+        add_events(
+            athlete_id="i1",
+            start_date="2024-01-15",
+            name="Test Workout",
+            description=sample_data["description"],
+        )
     )
     assert "Successfully created event:" in result
     assert '"id": "e123"' in result
     assert '"name": "Test Workout"' in result
+
+
+# Run the server
+if __name__ == "__main__":
+    mcp.run()
