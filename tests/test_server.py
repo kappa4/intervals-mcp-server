@@ -211,7 +211,7 @@ def test_update_event(monkeypatch):
 
     async def fake_request(url, **kwargs):
         method = kwargs.get("method", "GET")
-        if method == "GET" and url.endswith("/event/e123"):
+        if method == "GET" and url.endswith("/events/e123"):
             return existing_event_data
         if method == "PUT" and url.endswith("/events/e123"):
             # The real API would return the full updated object
