@@ -29,6 +29,7 @@ from intervals_mcp_server.server import (  # pylint: disable=wrong-import-positi
     get_wellness_data,
     get_activity_intervals,
     add_events,
+    update_event,
 )
 from tests.sample_data import INTERVALS_DATA  # pylint: disable=wrong-import-position
 
@@ -183,6 +184,56 @@ def test_add_events(monkeypatch):
     assert "Successfully created event:" in result
     assert '"id": "e123"' in result
     assert '"name": "Test Workout"' in result
+
+
+def test_update_event(monkeypatch):
+    """
+    Test update_event successfully updates an event and returns the response data.
+    """
+    existing_event_data = {
+        "id": "e123",
+        "start_date_local": "2024-01-15T00:00:00",
+        "category": "WORKOUT",
+        "name": "Old Workout",
+        "type": "Ride",
+        "description": "An old workout",
+    }
+
+    updated_name = "Updated Workout Name"
+    updated_description = "A new and improved workout."
+
+    # This will be the final state returned by the API after PUT
+    final_event_data = {
+        **existing_event_data,
+        "name": updated_name,
+        "description": updated_description,
+    }
+
+    async def fake_request(url, **kwargs):
+        method = kwargs.get("method", "GET")
+        if method == "GET" and url.endswith("/event/e123"):
+            return existing_event_data
+        if method == "PUT" and url.endswith("/events/e123"):
+            # The real API would return the full updated object
+            return final_event_data
+        # Should not happen in this test
+        return {"error": True, "message": "Unexpected API call in mock"}
+
+    monkeypatch.setattr("intervals_mcp_server.server.make_intervals_request", fake_request)
+
+    result = asyncio.run(
+        update_event(
+            event_id="e123",
+            athlete_id="i1",
+            name=updated_name,
+            description=updated_description,
+        )
+    )
+
+    assert "Successfully updated event:" in result
+    assert '"id": "e123"' in result
+    assert f'"name": "{updated_name}"' in result
+    assert f'"description": "{updated_description}"' in result
 
 
 # Run the server
