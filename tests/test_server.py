@@ -29,6 +29,7 @@ from intervals_mcp_server.server import (  # pylint: disable=wrong-import-positi
     get_wellness_data,
     get_activity_intervals,
     add_events,
+    delete_event,
     update_event,
 )
 from tests.sample_data import INTERVALS_DATA  # pylint: disable=wrong-import-position
@@ -234,6 +235,23 @@ def test_update_event(monkeypatch):
     assert '"id": "e123"' in result
     assert f'"name": "{updated_name}"' in result
     assert f'"description": "{updated_description}"' in result
+
+
+def test_delete_event(monkeypatch):
+    """
+    Test delete_event successfully deletes an event.
+    """
+    async def fake_delete_request(url, **kwargs):
+        method = kwargs.get("method")
+        if method == "DELETE" and url.endswith("/events/e456"):
+            return {}  # Successful delete returns empty
+        return {"error": True, "message": "Unexpected API call in mock"}
+
+    monkeypatch.setattr("intervals_mcp_server.server.make_intervals_request", fake_delete_request)
+
+    result = asyncio.run(delete_event(event_id="e456", athlete_id="i1"))
+
+    assert "Event e456 deleted successfully." in result
 
 
 # Run the server
