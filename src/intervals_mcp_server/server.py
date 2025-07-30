@@ -617,6 +617,7 @@ def _resolve_workout_type(name: str | None, workout_type: str | None) -> str:
         ("Swim", ["swim", "swimming", "pool"]),
         ("Walk", ["walk", "walking", "hike", "hiking"]),
         ("Row", ["row", "rowing"]),
+        ("Weight Training", ["weight", "weights", "strength", "筋トレ"]),
     ]
     for workout, keywords in mapping:
         if any(keyword in name_lower for keyword in keywords):
