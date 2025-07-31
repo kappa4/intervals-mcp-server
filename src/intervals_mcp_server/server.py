@@ -98,37 +98,24 @@ if ATHLETE_ID and not re.fullmatch(r"i?\d+", ATHLETE_ID):
         "ATHLETE_ID must be all digits (e.g. 123456) or start with 'i' followed by digits (e.g. i123456)"
     )
 
-# Import MCP components based on usage mode
-if "--stdio" in sys.argv:
-    # Running in stdio mode - use FastMCP
-    from mcp.server.fastmcp import FastMCP
-    mcp = FastMCP("intervals-icu")
-else:
-    # Running in HTTP/SSE mode - use standard imports
-    from mcp.server import Server
+# Import MCP components
+# Always import FastMCP for compatibility
+from mcp.server.fastmcp import FastMCP
+
+# Create FastMCP instance
+mcp = FastMCP("intervals-icu")
+server = mcp  # Alias for MCP CLI compatibility
+
+# Only import HTTP/SSE components if not in stdio mode
+if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio":
+    # Import additional components for HTTP/SSE mode
+    from mcp.server import Server as MCPServer
     from mcp.server.sse import SseServerTransport
     from mcp.server.models import InitializationOptions
     import mcp.types as types
     
-    mcp_server = Server("intervals-icu")
-    
-    # Create tool registration decorator for compatibility
-    def tool_decorator():
-        def decorator(func):
-            # Register the function with mcp_server
-            async def wrapper(**kwargs):
-                return await func(**kwargs)
-            wrapper.__name__ = func.__name__
-            wrapper.__doc__ = func.__doc__
-            return wrapper
-        return decorator
-    
-    # Create mcp object with tool method for compatibility
-    class MCPCompat:
-        def tool(self):
-            return tool_decorator()
-    
-    mcp = MCPCompat()
+    # Create separate MCP server instance for SSE
+    mcp_server = MCPServer("intervals-icu")
 
 # Initialize FastAPI app
 app = FastAPI(title="Intervals.icu MCP Server")
@@ -934,8 +921,14 @@ async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,to
     return f"Event {event_id} updated successfully."
 
 
+# Health check endpoint - always available
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring."""
+    return {"status": "healthy", "service": "intervals-icu-mcp-server"}
+
 # HTTP/SSE endpoints - only active when not running in stdio mode
-if "--stdio" not in sys.argv:
+if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio" and 'mcp_server' in globals():
     # Create SSE transport and attach it to the app
     sse_transport = SseServerTransport("/messages/")
 
@@ -961,18 +954,15 @@ if "--stdio" not in sys.argv:
     # Mount the message handling routes
     app.mount("/messages/", sse_transport.handle_post_message)
 
-    # Health check endpoint
-    @app.get("/health")
-    async def health_check():
-        """Health check endpoint for monitoring."""
-        return {"status": "healthy", "service": "intervals-icu-mcp-server"}
-
 
 # Run the server
 if __name__ == "__main__":
     # Check if we should run as HTTP server or stdio
     if len(sys.argv) > 1 and sys.argv[1] == "--stdio":
         # Run as stdio server (backwards compatibility)
+        mcp.run()
+    elif os.getenv("MCP_MODE") == "stdio":
+        # Run as stdio server when MCP_MODE is set
         mcp.run()
     else:
         # Run as HTTP server

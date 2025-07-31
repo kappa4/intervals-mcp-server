@@ -23,5 +23,6 @@ COPY .env.example .env.example
 # Install the package and runtime dependencies
 RUN pip install --no-cache-dir .
 
-# Default command to run the MCP server using stdio transport
-CMD ["mcp", "run", "src/intervals_mcp_server/server.py"]
+# Default command to run the server
+# Use python directly to run as HTTP server by default
+CMD ["python", "src/intervals_mcp_server/server.py"]
