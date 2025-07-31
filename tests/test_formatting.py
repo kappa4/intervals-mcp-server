@@ -64,6 +64,30 @@ def test_format_wellness_entry():
     assert "Fitness (CTL): 70" in result
 
 
+def test_format_wellness_entry_with_custom_fields():
+    """
+    Test that format_wellness_entry correctly formats custom wellness fields.
+    """
+    entry = {
+        "date": "2024-01-01",
+        "ctl": 70,
+        "weight": 70,
+        "sleepSecs": 28800,
+        # Custom fields
+        "MyCustomField": 100,
+        "AnotherMetric": "Good",
+        "customScore": 8.5,
+    }
+    result = format_wellness_entry(entry)
+    print(f"Result:\n{result}")  # Debug output
+    assert "Date: 2024-01-01" in result
+    assert "Fitness (CTL): 70" in result
+    assert "Custom Fields:" in result
+    assert "My Custom Field: 100" in result
+    assert "Another Metric: Good" in result
+    assert "Custom Score: 8.5" in result
+
+
 def test_format_event_summary():
     """
     Test that format_event_summary returns a string containing the event date and type.

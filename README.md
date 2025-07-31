@@ -209,7 +209,10 @@ Once the server is running and Claude Desktop is configured, you can use the fol
 - `get_activities`: Retrieve a list of activities
 - `get_activity_details`: Get detailed information for a specific activity
 - `get_activity_intervals`: Get detailed interval data for a specific activity
-- `get_wellness_data`: Fetch wellness data
+- `get_wellness_data`: Fetch wellness data (including custom wellness fields)
+  - Now supports custom wellness fields automatically
+  - Custom fields are displayed in a separate section in the output
+  - Use `include_custom_fields=False` to retrieve only standard fields
 - `get_events`: Retrieve upcoming events (workouts, races, etc.)
 - `get_event_by_id`: Get detailed information for a specific event
 

@@ -582,14 +582,16 @@ async def get_wellness_data(
     api_key: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    include_custom_fields: bool = True,
 ) -> str:
-    """Get wellness data for an athlete from Intervals.icu
+    """Get wellness data for an athlete from Intervals.icu, including custom fields
 
     Args:
         athlete_id: The Intervals.icu athlete ID (optional, will use ATHLETE_ID from .env if not provided)
         api_key: The Intervals.icu API key (optional, will use API_KEY from .env if not provided)
         start_date: Start date in YYYY-MM-DD format (optional, defaults to 30 days ago)
         end_date: End date in YYYY-MM-DD format (optional, defaults to today)
+        include_custom_fields: Whether to include custom wellness fields (optional, defaults to True)
     """
     # Use provided athlete_id or fall back to global ATHLETE_ID
     athlete_id_to_use = athlete_id if athlete_id is not None else ATHLETE_ID
@@ -605,9 +607,22 @@ async def get_wellness_data(
     # Call the Intervals.icu API
     params = {"oldest": start_date, "newest": end_date}
 
-    result = await make_intervals_request(
-        url=f"/athlete/{athlete_id_to_use}/wellness", api_key=api_key, params=params
-    )
+    # Try to use the extended endpoint if custom fields are requested
+    if include_custom_fields:
+        # First try the extended endpoint
+        result = await make_intervals_request(
+            url=f"/athlete/{athlete_id_to_use}/wellness-ext-", api_key=api_key, params=params
+        )
+        
+        # If the extended endpoint fails with 404, fall back to the standard endpoint
+        if isinstance(result, dict) and result.get("status_code") == 404:
+            result = await make_intervals_request(
+                url=f"/athlete/{athlete_id_to_use}/wellness", api_key=api_key, params=params
+            )
+    else:
+        result = await make_intervals_request(
+            url=f"/athlete/{athlete_id_to_use}/wellness", api_key=api_key, params=params
+        )
 
     if isinstance(result, dict) and "error" in result:
         return f"Error fetching wellness data: {result.get('message')}"

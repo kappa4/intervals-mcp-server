@@ -4,6 +4,7 @@ Formatting utilities for Intervals.icu MCP Server
 This module contains formatting functions for handling data from the Intervals.icu API.
 """
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -150,7 +151,25 @@ def format_wellness_entry(entry: dict[str, Any]) -> str:
     else:
         sport_info = "  None available"
 
-    return f"""Date: {entry.get("date", "Unknown date")}
+    # Known standard wellness fields
+    standard_fields = {
+        "date", "id", "ctl", "atl", "rampRate", "ctlLoad", "atlLoad", "sportInfo",
+        "weight", "restingHR", "hrv", "hrvSDNN", "avgSleepingHR", "spO2", "systolic",
+        "diastolic", "respiration", "bloodGlucose", "lactate", "vo2max", "bodyFat",
+        "abdomen", "baevskySI", "sleepSecs", "sleepHours", "sleepScore", "sleepQuality",
+        "readiness", "menstrualPhase", "menstrualPhasePredicted", "soreness", "fatigue",
+        "stress", "mood", "motivation", "injury", "kcalConsumed", "hydration",
+        "hydrationVolume", "steps", "comments", "locked", "updated"
+    }
+
+    # Collect custom fields
+    custom_fields = {}
+    for key, value in entry.items():
+        if key not in standard_fields and value is not None:
+            custom_fields[key] = value
+
+    # Format standard fields
+    formatted_output = f"""Date: {entry.get("date", "Unknown date")}
 ID: {entry.get("id", "N/A")}
 
 Training Metrics:
@@ -203,11 +222,25 @@ Nutrition & Hydration:
   Hydration Volume: {entry.get("hydrationVolume", "N/A")} ml
 
 Activity:
-  Steps: {entry.get("steps", "N/A")}
+  Steps: {entry.get("steps", "N/A")}"""
+
+    # Add custom fields if any exist
+    if custom_fields:
+        formatted_output += "\n\nCustom Fields:"
+        for field_name, field_value in custom_fields.items():
+            # Convert CamelCase to readable format
+            readable_name = " ".join(
+                word for word in re.findall(r'[A-Z][a-z]*|[a-z]+', field_name)
+            ).title()
+            formatted_output += f"\n  {readable_name}: {field_value}"
+
+    formatted_output += f"""
 
 Comments: {entry.get("comments", "No comments")}
 Status: {"Locked" if entry.get("locked") else "Unlocked"}
 Last Updated: {entry.get("updated", "Unknown")}"""
+
+    return formatted_output
 
 
 def format_event_summary(event: dict[str, Any]) -> str:
