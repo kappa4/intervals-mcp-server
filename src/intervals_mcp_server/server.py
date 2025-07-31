@@ -50,10 +50,6 @@ import json
 import httpx  # pylint: disable=import-error
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from mcp.server import Server
-from mcp.server.sse import SseServerTransport
-from mcp.server.models import InitializationOptions
-import mcp.types as types
 
 # Import formatting utilities
 from intervals_mcp_server.utils.formatting import (
@@ -102,8 +98,37 @@ if ATHLETE_ID and not re.fullmatch(r"i?\d+", ATHLETE_ID):
         "ATHLETE_ID must be all digits (e.g. 123456) or start with 'i' followed by digits (e.g. i123456)"
     )
 
-# Initialize MCP server
-mcp_server = Server("intervals-icu")
+# Import MCP components based on usage mode
+if "--stdio" in sys.argv:
+    # Running in stdio mode - use FastMCP
+    from mcp.server.fastmcp import FastMCP
+    mcp = FastMCP("intervals-icu")
+else:
+    # Running in HTTP/SSE mode - use standard imports
+    from mcp.server import Server
+    from mcp.server.sse import SseServerTransport
+    from mcp.server.models import InitializationOptions
+    import mcp.types as types
+    
+    mcp_server = Server("intervals-icu")
+    
+    # Create tool registration decorator for compatibility
+    def tool_decorator():
+        def decorator(func):
+            # Register the function with mcp_server
+            async def wrapper(**kwargs):
+                return await func(**kwargs)
+            wrapper.__name__ = func.__name__
+            wrapper.__doc__ = func.__doc__
+            return wrapper
+        return decorator
+    
+    # Create mcp object with tool method for compatibility
+    class MCPCompat:
+        def tool(self):
+            return tool_decorator()
+    
+    mcp = MCPCompat()
 
 # Initialize FastAPI app
 app = FastAPI(title="Intervals.icu MCP Server")
@@ -327,7 +352,7 @@ def _format_activities_response(
     return activities_summary
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def get_activities(  # pylint: disable=too-many-arguments,too-many-return-statements,too-many-branches,too-many-positional-arguments
     athlete_id: str | None = None,
     api_key: str | None = None,
@@ -397,7 +422,7 @@ async def get_activities(  # pylint: disable=too-many-arguments,too-many-return-
     return _format_activities_response(activities, athlete_id_to_use, include_unnamed)
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def get_activity_details(activity_id: str, api_key: str | None = None) -> str:
     """Get detailed information for a specific activity from Intervals.icu
 
@@ -438,7 +463,7 @@ async def get_activity_details(activity_id: str, api_key: str | None = None) -> 
     return detailed_view
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def get_activity_intervals(activity_id: str, api_key: str | None = None) -> str:
     """Get interval data for a specific activity from Intervals.icu
 
@@ -470,7 +495,7 @@ async def get_activity_intervals(activity_id: str, api_key: str | None = None) -
     return format_intervals(result)
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def get_events(
     athlete_id: str | None = None,
     api_key: str | None = None,
@@ -527,7 +552,7 @@ async def get_events(
     return events_summary
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def get_event_by_id(
     event_id: str,
     athlete_id: str | None = None,
@@ -564,7 +589,7 @@ async def get_event_by_id(
     return format_event_details(result)
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def get_wellness_data(
     athlete_id: str | None = None,
     api_key: str | None = None,
@@ -651,7 +676,7 @@ def _resolve_workout_type(name: str | None, workout_type: str | None) -> str:
     return "Ride"  # Default
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def delete_event(
     event_id: str,
     athlete_id: str | None = None,
@@ -676,7 +701,7 @@ async def delete_event(
     return json.dumps(result, indent=2)
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def delete_events_by_date_range(
     start_date: str,
     end_date: str,
@@ -711,7 +736,7 @@ async def delete_events_by_date_range(
     return f"Deleted {len(events) - len(failed_events)} events. Failed to delete {len(failed_events)} events: {failed_events}" 
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def add_or_update_event(
     workout_type: str,
     name: str,
@@ -825,7 +850,7 @@ async def add_or_update_event(
     return message
 
 
-@mcp_server.tool()
+@mcp.tool()
 async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
     event_id: str,
     athlete_id: str | None = None,
@@ -909,33 +934,38 @@ async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,to
     return f"Event {event_id} updated successfully."
 
 
-# Create SSE transport and attach it to the app
-sse_transport = SseServerTransport("/messages")
+# HTTP/SSE endpoints - only active when not running in stdio mode
+if "--stdio" not in sys.argv:
+    # Create SSE transport and attach it to the app
+    sse_transport = SseServerTransport("/messages/")
 
+    from fastapi import Request
+    from starlette.responses import Response
+    
+    @app.get("/sse")
+    async def handle_sse(request: Request):
+        """Handle SSE connections from MCP clients."""
+        async with sse_transport.connect_sse(
+            request.scope, request.receive, request._send
+        ) as (read_stream, write_stream):
+            await mcp_server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="intervals-icu",
+                    server_version="1.0.0",
+                ),
+            )
+        return Response()
 
-@app.get("/sse")
-async def handle_sse(request):
-    """Handle SSE connections from MCP clients."""
-    async with sse_transport.connect_sse(request) as (read_stream, write_stream):
-        await mcp_server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="intervals-icu",
-                server_version="1.0.0",
-            ),
-        )
+    # Mount the message handling routes
+    app.mount("/messages/", sse_transport.handle_post_message)
 
-
-# Mount the message handling routes
-app.mount("/messages", sse_transport.get_message_handler())
-
-
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring."""
-    return {"status": "healthy", "service": "intervals-icu-mcp-server"}
+    # Health check endpoint
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint for monitoring."""
+        return {"status": "healthy", "service": "intervals-icu-mcp-server"}
 
 
 # Run the server
@@ -943,18 +973,7 @@ if __name__ == "__main__":
     # Check if we should run as HTTP server or stdio
     if len(sys.argv) > 1 and sys.argv[1] == "--stdio":
         # Run as stdio server (backwards compatibility)
-        import asyncio
-        from mcp.server.stdio import stdio_server
-
-        asyncio.run(
-            stdio_server(
-                mcp_server,
-                InitializationOptions(
-                    server_name="intervals-icu",
-                    server_version="1.0.0",
-                ),
-            )
-        )
+        mcp.run()
     else:
         # Run as HTTP server
         import uvicorn
