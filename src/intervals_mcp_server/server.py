@@ -11,14 +11,18 @@ Main Features:
     - Wellness data tracking and visualization
     - Error handling with user-friendly messages
     - Configurable parameters with environment variable support
+    - Remote MCP server capability with HTTP/SSE transport
 
 Usage:
     This server is designed to be run as a standalone script and exposes several MCP tools
     for use with Claude Desktop or other MCP-compatible clients. The server loads configuration
     from environment variables (optionally via a .env file) and communicates with the Intervals.icu API.
 
-    To run the server:
+    To run the server locally:
         $ python src/intervals_mcp_server/server.py
+
+    To run the server remotely:
+        $ uvicorn intervals_mcp_server.server:app --host 0.0.0.0 --port 8000
 
     MCP tools provided:
         - get_activities
@@ -36,6 +40,7 @@ from json import JSONDecodeError
 import logging
 import os
 import re
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from http import HTTPStatus
@@ -43,7 +48,12 @@ from typing import Any
 import json
 
 import httpx  # pylint: disable=import-error
-from mcp.server.fastmcp import FastMCP  # pylint: disable=import-error
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from mcp import Server
+from mcp.server.sse import SseServerTransport
+from mcp.server.models import InitializationOptions
+import mcp.types as types
 
 # Import formatting utilities
 from intervals_mcp_server.utils.formatting import (
@@ -76,14 +86,42 @@ logger = logging.getLogger("intervals_icu_mcp_server")
 # Create a single AsyncClient instance for all requests
 httpx_client = httpx.AsyncClient()
 
+# Constants
+INTERVALS_API_BASE_URL = os.getenv("INTERVALS_API_BASE_URL", "https://intervals.icu/api/v1")
+API_KEY = os.getenv("API_KEY", "")  # Provide default empty string
+ATHLETE_ID = os.getenv("ATHLETE_ID", "")  # Default athlete ID from .env
+USER_AGENT = "intervalsicu-mcp-server/1.0"
+
+# Server configuration
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
+
+# Accept athlete IDs that are either all digits or start with 'i' followed by digits
+if ATHLETE_ID and not re.fullmatch(r"i?\d+", ATHLETE_ID):
+    raise ValueError(
+        "ATHLETE_ID must be all digits (e.g. 123456) or start with 'i' followed by digits (e.g. i123456)"
+    )
+
+# Initialize MCP server
+mcp_server = Server("intervals-icu")
+
+# Initialize FastAPI app
+app = FastAPI(title="Intervals.icu MCP Server")
+
+# Add CORS middleware for browser-based clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @asynccontextmanager
-async def lifespan(_app: FastMCP):
+async def lifespan(_app: FastAPI):
     """
     Context manager to ensure the shared httpx client is closed when the server stops.
-
-    Args:
-        _app (FastMCP): The MCP server application instance.
     """
     try:
         yield
@@ -91,20 +129,8 @@ async def lifespan(_app: FastMCP):
         await httpx_client.aclose()
 
 
-# Initialize FastMCP server with custom lifespan
-mcp = FastMCP("intervals-icu", lifespan=lifespan)
-
-# Constants
-INTERVALS_API_BASE_URL = os.getenv("INTERVALS_API_BASE_URL", "https://intervals.icu/api/v1")
-API_KEY = os.getenv("API_KEY", "")  # Provide default empty string
-ATHLETE_ID = os.getenv("ATHLETE_ID", "")  # Default athlete ID from .env
-USER_AGENT = "intervalsicu-mcp-server/1.0"
-
-# Accept athlete IDs that are either all digits or start with 'i' followed by digits
-if not re.fullmatch(r"i?\d+", ATHLETE_ID):
-    raise ValueError(
-        "ATHLETE_ID must be all digits (e.g. 123456) or start with 'i' followed by digits (e.g. i123456)"
-    )
+# Update the app lifespan
+app.router.lifespan_context = lifespan
 
 
 def validate_date(date_str: str) -> str:
@@ -301,7 +327,7 @@ def _format_activities_response(
     return activities_summary
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def get_activities(  # pylint: disable=too-many-arguments,too-many-return-statements,too-many-branches,too-many-positional-arguments
     athlete_id: str | None = None,
     api_key: str | None = None,
@@ -371,7 +397,7 @@ async def get_activities(  # pylint: disable=too-many-arguments,too-many-return-
     return _format_activities_response(activities, athlete_id_to_use, include_unnamed)
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def get_activity_details(activity_id: str, api_key: str | None = None) -> str:
     """Get detailed information for a specific activity from Intervals.icu
 
@@ -412,7 +438,7 @@ async def get_activity_details(activity_id: str, api_key: str | None = None) -> 
     return detailed_view
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def get_activity_intervals(activity_id: str, api_key: str | None = None) -> str:
     """Get interval data for a specific activity from Intervals.icu
 
@@ -444,7 +470,7 @@ async def get_activity_intervals(activity_id: str, api_key: str | None = None) -
     return format_intervals(result)
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def get_events(
     athlete_id: str | None = None,
     api_key: str | None = None,
@@ -501,7 +527,7 @@ async def get_events(
     return events_summary
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def get_event_by_id(
     event_id: str,
     athlete_id: str | None = None,
@@ -538,7 +564,7 @@ async def get_event_by_id(
     return format_event_details(result)
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def get_wellness_data(
     athlete_id: str | None = None,
     api_key: str | None = None,
@@ -625,7 +651,7 @@ def _resolve_workout_type(name: str | None, workout_type: str | None) -> str:
     return "Ride"  # Default
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def delete_event(
     event_id: str,
     athlete_id: str | None = None,
@@ -650,7 +676,7 @@ async def delete_event(
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def delete_events_by_date_range(
     start_date: str,
     end_date: str,
@@ -685,7 +711,7 @@ async def delete_events_by_date_range(
     return f"Deleted {len(events) - len(failed_events)} events. Failed to delete {len(failed_events)} events: {failed_events}" 
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def add_or_update_event(
     workout_type: str,
     name: str,
@@ -799,7 +825,7 @@ async def add_or_update_event(
     return message
 
 
-@mcp.tool()
+@mcp_server.tool()
 async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,too-many-statements
     event_id: str,
     athlete_id: str | None = None,
@@ -883,38 +909,55 @@ async def update_event(  # pylint: disable=too-many-arguments,too-many-locals,to
     return f"Event {event_id} updated successfully."
 
 
-@mcp.tool()
-async def delete_event(
-    event_id: str,
-    athlete_id: str | None = None,
-    api_key: str | None = None,
-) -> str:
-    """Delete an existing event from Intervals.icu.
+# Create SSE transport and attach it to the app
+sse_transport = SseServerTransport("/messages")
 
-    This function deletes an event using the DELETE /api/v1/athlete/{id}/events/{eventId} endpoint.
 
-    Args:
-        event_id: The Intervals.icu event ID (required).
-        athlete_id: The Intervals.icu athlete ID (optional, will use ATHLETE_ID from .env if not provided).
-        api_key: The Intervals.icu API key (optional, will use API_KEY from .env if not provided).
-    """
-    athlete_id_to_use = athlete_id if athlete_id is not None else ATHLETE_ID
-    if not athlete_id_to_use:
-        return "Error: No athlete ID provided and no default ATHLETE_ID found in environment variables."
+@app.get("/sse")
+async def handle_sse(request):
+    """Handle SSE connections from MCP clients."""
+    async with sse_transport.connect_sse(request) as (read_stream, write_stream):
+        await mcp_server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="intervals-icu",
+                server_version="1.0.0",
+            ),
+        )
 
-    result = await make_intervals_request(
-        url=f"/athlete/{athlete_id_to_use}/events/{event_id}",
-        api_key=api_key,
-        method="DELETE",
-    )
 
-    if isinstance(result, dict) and "error" in result:
-        error_message = result.get("message", "Unknown error")
-        return f"Error deleting event: {error_message}"
+# Mount the message handling routes
+app.mount("/messages", sse_transport.get_message_handler())
 
-    return f"Event {event_id} deleted successfully."
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring."""
+    return {"status": "healthy", "service": "intervals-icu-mcp-server"}
 
 
 # Run the server
 if __name__ == "__main__":
-    mcp.run()
+    # Check if we should run as HTTP server or stdio
+    if len(sys.argv) > 1 and sys.argv[1] == "--stdio":
+        # Run as stdio server (backwards compatibility)
+        import asyncio
+        from mcp.server.stdio import stdio_server
+
+        asyncio.run(
+            stdio_server(
+                mcp_server,
+                InitializationOptions(
+                    server_name="intervals-icu",
+                    server_version="1.0.0",
+                ),
+            )
+        )
+    else:
+        # Run as HTTP server
+        import uvicorn
+
+        logger.info(f"Starting Intervals.icu MCP server on {HOST}:{PORT}")
+        uvicorn.run(app, host=HOST, port=PORT)
