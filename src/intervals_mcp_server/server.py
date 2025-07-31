@@ -50,7 +50,7 @@ import json
 import httpx  # pylint: disable=import-error
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from mcp import Server
+from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.server.models import InitializationOptions
 import mcp.types as types
