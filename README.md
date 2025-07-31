@@ -106,9 +106,56 @@ mcp install src/intervals_mcp_server/server.py --name "Intervals.icu" --with-edi
 
 ## Usage
 
+### Running as a Remote MCP Server
+
+The server now supports running as a remote HTTP/SSE server, which allows it to be deployed to cloud platforms and accessed from anywhere.
+
+#### 1. Running locally as HTTP server
+
+```bash
+# Using uvicorn directly
+uvicorn intervals_mcp_server.server:app --host 0.0.0.0 --port 8000
+
+# Or using Python
+python src/intervals_mcp_server/server.py
+```
+
+The server will be available at `http://localhost:8000`. You can check the health status at `http://localhost:8000/health`.
+
+#### 2. Deploying to cloud platforms
+
+This server can be deployed to various cloud platforms:
+
+- **Railway**: Use the included `Procfile`
+- **Heroku**: Use the included `Procfile`
+- **Cloudflare Workers**: Adapt the code as needed
+- **Any platform supporting Python/FastAPI**
+
+Make sure to set the required environment variables:
+- `API_KEY`: Your Intervals.icu API key
+- `ATHLETE_ID`: Your athlete ID
+- `PORT`: The port to bind to (often set automatically by the platform)
+
+#### 3. Connecting from Claude Desktop
+
+To connect to a remote MCP server from Claude Desktop, update your configuration:
+
+```json
+{
+  "mcpServers": {
+    "intervals-remote": {
+      "url": "https://your-server-url.com/sse",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+### Running as a Local MCP Server (Legacy)
+
 ### 1. Configure Claude Desktop
 
-To use this server with Claude Desktop, you need to add it to your Claude Desktop configuration.
+To use this server locally with Claude Desktop, you need to add it to your Claude Desktop configuration.
 
 1. Run the following from the `intervals_mcp_server` directory to configure Claude Desktop:
 
@@ -183,6 +230,13 @@ pytest -v tests
 To start the server manually (useful when developing or testing), run:
 
 ```bash
+# Run as HTTP/SSE server (default)
+python src/intervals_mcp_server/server.py
+
+# Run as stdio server (legacy MCP mode)
+python src/intervals_mcp_server/server.py --stdio
+
+# Or using MCP CLI for stdio mode
 mcp run src/intervals_mcp_server/server.py
 ```
 
