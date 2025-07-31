@@ -151,61 +151,58 @@ To connect to a remote MCP server from Claude Desktop, update your configuration
 }
 ```
 
-### Running as a Local MCP Server (Legacy)
+### Running as a Local MCP Server
 
-### 1. Configure Claude Desktop
+#### Option 1: Using STDIO mode with Claude Desktop
+
+##### 1. Configure Claude Desktop
 
 To use this server locally with Claude Desktop, you need to add it to your Claude Desktop configuration.
 
-1. Run the following from the `intervals_mcp_server` directory to configure Claude Desktop:
+1. Manually configure Claude Desktop by editing your `claude_desktop_config.json` file:
 
-```bash
-mcp install src/intervals_mcp_server/server.py --name "Intervals.icu" --with-editable . --env-file .env
-```
+   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - On Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
-2. If you open your Claude Desktop App configuration file `claude_desktop_config.json`, it should look like this:
+2. Add the following configuration to the file:
 
 ```json
 {
   "mcpServers": {
     "Intervals.icu": {
-      "command": "/Users/<USERNAME>/.cargo/bin/uv",
+      "command": "/Users/<USERNAME>/.local/bin/uv",
       "args": [
         "run",
-        "--with",
-        "mcp[cli]",
-        "--with-editable",
+        "--directory",
         "/path/to/intervals-mcp-server",
-        "mcp",
-        "run",
-        "/path/to/intervals-mcp-server/src/intervals_mcp_server/server.py"
+        "python",
+        "-m",
+        "intervals_mcp_server.server",
+        "--stdio"
       ],
       "env": {
         "INTERVALS_API_BASE_URL": "https://intervals.icu/api/v1",
         "ATHLETE_ID": "<YOUR_ATHLETE_ID>",
         "API_KEY": "<YOUR_API_KEY>",
-        "LOG_LEVEL": "INFO"
+        "LOG_LEVEL": "INFO",
+        "MCP_MODE": "stdio"
       }
     }
   }
 }
 ```
 
-Where `/path/to/` is the path to the `intervals-mcp-server` code folder in your system.
+Where:
+- `/Users/<USERNAME>/.local/bin/uv` should be replaced with the actual path to your `uv` installation (run `which uv` to find it)
+- `/path/to/intervals-mcp-server` should be replaced with the actual path to your cloned repository
 
-If you observe the following error messages when you open Claude Desktop, include the full path to `uv` in the command key in the `claude_desktop_config.json` configuration file. You can get the full path by running `which uv` in the terminal.
+Note: The `--stdio` flag and `MCP_MODE: "stdio"` are essential for running in STDIO mode with Claude Desktop.
 
-```
-2025-04-28T10:21:11.462Z [info] [Intervals.icu MCP Server] Initializing server...
-2025-04-28T10:21:11.477Z [error] [Intervals.icu MCP Server] spawn uv ENOENT
-2025-04-28T10:21:11.477Z [error] [Intervals.icu MCP Server] spawn uv ENOENT
-2025-04-28T10:21:11.481Z [info] [Intervals.icu MCP Server] Server transport closed
-2025-04-28T10:21:11.481Z [info] [Intervals.icu MCP Server] Client transport closed
-```
+If you see errors like `spawn uv ENOENT`, make sure to use the full path to `uv` (found with `which uv`).
 
 3. Restart Claude Desktop.
 
-### 2. Use the MCP server with Claude
+##### 2. Use the MCP server with Claude
 
 Once the server is running and Claude Desktop is configured, you can use the following tools to ask questions about your past and future activities, events, and wellness data.
 
@@ -215,6 +212,33 @@ Once the server is running and Claude Desktop is configured, you can use the fol
 - `get_wellness_data`: Fetch wellness data
 - `get_events`: Retrieve upcoming events (workouts, races, etc.)
 - `get_event_by_id`: Get detailed information for a specific event
+
+#### Option 2: Running locally as HTTP server
+
+You can also run the server locally as an HTTP/SSE server and connect to it from Claude Desktop or other MCP clients:
+
+1. Start the server:
+```bash
+# Using Python directly (runs on port 8000 by default)
+python src/intervals_mcp_server/server.py
+
+# Or using uvicorn with custom port
+uvicorn intervals_mcp_server.server:app --host 0.0.0.0 --port 8000
+```
+
+2. Configure Claude Desktop to connect to the local HTTP server:
+```json
+{
+  "mcpServers": {
+    "intervals-local-http": {
+      "url": "http://localhost:8000/sse",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+3. The server will automatically load environment variables from your `.env` file
 
 ## Development and testing
 
