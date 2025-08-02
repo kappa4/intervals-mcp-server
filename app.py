@@ -53,8 +53,12 @@ def validate_environment():
 # Validate environment on import
 validate_environment()
 
+# Add src directory to Python path for Railway
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
 # Import the existing mcp instance and app from server.py
-# This path works in Railway's flat deployment structure
 from intervals_mcp_server.server import mcp, app
 
 # Additional imports for OAuth endpoints
