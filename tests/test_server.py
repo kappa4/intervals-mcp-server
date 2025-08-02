@@ -166,9 +166,6 @@ def test_add_or_update_event(monkeypatch):
         "start_date_local": "2024-01-15T00:00:00",
     }
 
-    sample_data = {
-        "description": "- 15m 80% Warm-up\\n- 3m 110% High-intensity interval\\n- 3m 80% Recovery\\n- 10m 80% Cool-down"
-    }
 
     async def fake_post_request(*_args, **_kwargs):
         return expected_response
@@ -249,6 +246,4 @@ def test_delete_event(monkeypatch):
     assert "Event e456 deleted successfully." in result
 
 
-# Run the server
-if __name__ == "__main__":
-    mcp.run()
+# Test file - no direct execution needed

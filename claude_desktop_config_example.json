@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "intervals-icu-local": {
+      "command": "uv",
+      "args": ["run", "--directory", "/Users/k.takahashi/src/github.com/kappa4/intervals-mcp-server", "python", "-m", "intervals_mcp_server.server", "--stdio"],
+      "env": {
+        "ATHLETE_ID": "your_athlete_id_here",
+        "API_KEY": "your_intervals_api_key_here"
+      }
+    },
+    "intervals-icu-remote-api-key": {
+      "url": "http://localhost:9000/sse",
+      "transport": "sse",
+      "headers": {
+        "X-API-Key": "test_key_for_claude_desktop"
+      }
+    },
+    "intervals-icu-remote-oauth": {
+      "url": "http://localhost:9000",
+      "transport": "sse",
+      "oauth": {
+        "authorization_endpoint": "/oauth/authorize",
+        "token_endpoint": "/oauth/token",
+        "registration_endpoint": "/oauth/register",
+        "scopes": ["intervals:read", "intervals:write"]
+      }
+    }
+  }
+}

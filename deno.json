@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "tasks": {
+    "start": "python main.py",
+    "dev": "python main.py --dev",
+    "test": "python -m pytest tests/",
+    "lint": "python -m ruff check .",
+    "format": "python -m ruff format ."
+  },
+  "imports": {
+    "main": "./main.py"
+  }
+}

@@ -16,7 +16,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
-    "sse-starlette>=2.0.0"
+    "sse-starlette>=2.0.0",
+    "pyjwt>=2.10.1",
+    "cryptography>=45.0.4",
+    "fastmcp>=2.11.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -118,3 +121,9 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.uv]
 index-url = "https://pypi.org/simple"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "ruff>=0.11.11",
+]

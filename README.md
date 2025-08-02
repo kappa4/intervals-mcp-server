@@ -106,9 +106,9 @@ mcp install src/intervals_mcp_server/server.py --name "Intervals.icu" --with-edi
 
 ## Usage
 
-### Running as a Remote MCP Server
+### Running as a Remote MCP Server (Beta)
 
-The server now supports running as a remote HTTP/SSE server, which allows it to be deployed to cloud platforms and accessed from anywhere.
+**Note:** Remote MCP server functionality is currently in beta. While the server includes HTTP/SSE transport support, full Remote MCP compliance requires additional configuration.
 
 #### 1. Running locally as HTTP server
 
@@ -122,30 +122,72 @@ python src/intervals_mcp_server/server.py
 
 The server will be available at `http://localhost:8000`. You can check the health status at `http://localhost:8000/health`.
 
-#### 2. Deploying to cloud platforms
+#### 2. Security Configuration
+
+For production use, configure the following environment variables:
+
+```bash
+# API Key authentication (recommended)
+MCP_API_KEY=your_secure_api_key_here
+
+# CORS settings
+ALLOWED_ORIGINS=https://claude.ai,https://app.claude.ai
+
+# HTTPS enforcement (for production)
+ENFORCE_HTTPS=true
+```
+
+#### 3. Authentication via Proxy (Recommended)
+
+Due to current limitations in the MCP framework, we recommend implementing authentication at the proxy level:
+
+**Cloudflare Workers Example:**
+```javascript
+export default {
+  async fetch(request, env) {
+    const apiKey = request.headers.get('X-API-Key');
+    if (apiKey !== env.MCP_API_KEY) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+    return fetch(env.MCP_SERVER_URL, request);
+  }
+}
+```
+
+**Nginx Example:**
+```nginx
+location /mcp {
+    if ($http_x_api_key != "your-api-key") {
+        return 401;
+    }
+    proxy_pass http://localhost:8000;
+}
+```
+
+#### 4. Deploying to cloud platforms
 
 This server can be deployed to various cloud platforms:
 
 - **Railway**: Use the included `Procfile`
 - **Heroku**: Use the included `Procfile`
-- **Cloudflare Workers**: Adapt the code as needed
+- **Render**: Automatic deployment supported
 - **Any platform supporting Python/FastAPI**
 
-Make sure to set the required environment variables:
-- `API_KEY`: Your Intervals.icu API key
-- `ATHLETE_ID`: Your athlete ID
-- `PORT`: The port to bind to (often set automatically by the platform)
+Make sure to set all required environment variables including security settings.
 
-#### 3. Connecting from Claude Desktop
+#### 5. Connecting from Claude Desktop
 
-To connect to a remote MCP server from Claude Desktop, update your configuration:
+**Note:** Remote MCP connection from Claude Desktop requires proper authentication setup.
 
 ```json
 {
   "mcpServers": {
     "intervals-remote": {
       "url": "https://your-server-url.com/sse",
-      "transport": "sse"
+      "transport": "sse",
+      "headers": {
+        "X-API-Key": "your_secure_api_key"
+      }
     }
   }
 }
@@ -249,7 +291,19 @@ Install development dependencies and run the test suite with:
 
 ```bash
 uv sync --all-extras
-pytest -v tests
+uv run pytest -v tests
+```
+
+### Testing Security Features
+
+To test the security features of the remote MCP server:
+
+```bash
+# Start the server with security settings
+PORT=9000 MCP_API_KEY=test_key ALLOWED_ORIGINS=https://claude.ai uv run python src/intervals_mcp_server/server.py
+
+# In another terminal, run integration tests
+uv run python test_security_integration.py
 ```
 
 ### Running the server locally

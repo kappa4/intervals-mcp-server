@@ -44,16 +44,18 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Optional
 import json
 
 import httpx  # pylint: disable=import-error
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Depends, Header, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, Response
 
 # Import security utilities
 from intervals_mcp_server.security import (
+    verify_origin,
+    verify_api_key,
+    enforce_https,
     get_cors_origins,
     log_request,
 )
@@ -63,6 +65,7 @@ from intervals_mcp_server.oauth import (
     get_protected_resource_metadata,
     get_authorization_server_metadata,
     verify_oauth_or_api_key,
+    check_scope_permission,
     create_jwks,
     register_oauth_client,
     handle_authorization_request,
@@ -70,7 +73,7 @@ from intervals_mcp_server.oauth import (
 )
 
 # Import authentication context
-from intervals_mcp_server.auth_context import require_scope
+from intervals_mcp_server.auth_context import require_scope, get_user_id, set_auth_context
 
 # Import formatting utilities
 from intervals_mcp_server.utils.formatting import (
@@ -128,8 +131,16 @@ mcp = FastMCP("intervals-icu")
 server = mcp  # Alias for MCP CLI compatibility
 
 # HTTP/SSE mode imports - always import for HTTP server mode
+from mcp.server import Server as MCPServer  
+from mcp.server.sse import SseServerTransport
+from mcp.server.models import InitializationOptions
+import mcp.types as types
+from fastapi.responses import StreamingResponse
+import asyncio
+import uuid
 
-# No need for separate MCP server instance - FastMCP handles everything
+# Create MCP server instance for SSE
+mcp_server = MCPServer("intervals-icu")
 
 # Initialize FastAPI app
 app = FastAPI(title="Intervals.icu MCP Server")
@@ -137,7 +148,44 @@ app = FastAPI(title="Intervals.icu MCP Server")
 # Remove original_app - use single app instance
 # original_app = app
 
-# Remove old SSE connection class - using MCP's SseServerTransport instead
+# Global state for SSE connections
+sse_connections = {}
+
+class MCPSSEConnection:
+    """Handle MCP over SSE connection"""
+    
+    def __init__(self, connection_id: str):
+        self.connection_id = connection_id
+        self.queue = asyncio.Queue()
+        self.closed = False
+        
+    async def send_message(self, message: dict):
+        """Send message to SSE connection"""
+        if not self.closed:
+            await self.queue.put(message)
+    
+    async def close(self):
+        """Close the connection"""
+        self.closed = True
+        await self.queue.put(None)  # Sentinel to end stream
+        
+    async def stream_generator(self):
+        """Generate SSE stream"""
+        try:
+            while not self.closed:
+                try:
+                    # Wait for message with timeout
+                    message = await asyncio.wait_for(self.queue.get(), timeout=30.0)
+                    if message is None:  # Sentinel to close connection
+                        break
+                    yield f"data: {json.dumps(message)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield "data: {\"type\": \"ping\"}\n\n"
+        except Exception as e:
+            logger.error(f"SSE stream error: {e}")
+        finally:
+            self.closed = True
 
 # Add CORS middleware - essential for browser clients
 app.add_middleware(
@@ -169,126 +217,72 @@ async def lifespan(_app: FastAPI):
 # Update the app lifespan
 app.router.lifespan_context = lifespan
 
-# HTTP/SSE mode setup
-if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio":
-    if "--mcp-only" in sys.argv:
-        # MCP-only mode: Run FastMCP SSE server directly
-        logger.info("Starting in MCP-only mode (SSE server)")
-        # This will be handled in __main__ section
-    else:
-        # Full mode: FastAPI with OAuth + proxy to MCP
-        from fastapi.responses import StreamingResponse
-        import httpx
-        
-        # MCP server configuration
-        MCP_INTERNAL_PORT = int(os.getenv("MCP_INTERNAL_PORT", "9001"))
-        MCP_INTERNAL_URL = f"http://localhost:{MCP_INTERNAL_PORT}"
-        
-        async def proxy_sse_to_mcp(request: Request, target_path: str = "/sse"):
-            """Proxy SSE requests to internal MCP server"""
-            # Verify authentication first
-            authorization = request.headers.get("authorization")
-            x_api_key = request.headers.get("x-api-key")
-            
-            # For HEAD requests without auth, return 401
-            if request.method == "HEAD" and not authorization and not x_api_key:
-                return Response(status_code=401, content="Authentication required")
-            
-            try:
-                auth_result = await verify_oauth_or_api_key(request, authorization, x_api_key)
-                auth_context = {
-                    "user_id": auth_result.get("sub") or auth_result.get("user_id") or "anonymous",
-                    "scopes": auth_result.get("scopes", []),
-                    "auth_type": auth_result.get("type", "none")
-                }
-                logger.info(f"Proxying SSE request: {auth_context['auth_type']} user {auth_context['user_id']}")
-            except HTTPException as e:
-                return Response(status_code=e.status_code, content=e.detail)
-            
-            # Build target URL with query parameters
-            query_string = str(request.url.query) if request.url.query else ""
-            target_url = f"{MCP_INTERNAL_URL}{target_path}"
-            if query_string:
-                target_url = f"{target_url}?{query_string}"
-            
-            # Forward headers (excluding host)
-            headers = dict(request.headers)
-            headers.pop("host", None)
-            
-            # For SSE, we need to stream the response
-            if request.headers.get("accept") == "text/event-stream":
-                async def event_stream():
-                    async with httpx.AsyncClient() as client:
-                        # MCP SSE endpoint only accepts GET requests
-                        method = "GET" if target_path == "/sse" else request.method
-                        content = None if method == "GET" else await request.body()
-                        
-                        async with client.stream(
-                            method,
-                            target_url,
-                            headers=headers,
-                            content=content,
-                            timeout=httpx.Timeout(None),  # No timeout for SSE
-                            follow_redirects=True,  # Follow redirects
-                        ) as response:
-                            async for chunk in response.aiter_bytes():
-                                yield chunk
-                
-                return StreamingResponse(
-                    event_stream(),
-                    media_type="text/event-stream",
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "Connection": "keep-alive",
-                        "X-Accel-Buffering": "no",
-                    }
-                )
-            else:
-                # Non-SSE requests
-                async with httpx.AsyncClient() as client:
-                    response = await client.request(
-                        request.method,
-                        target_url,
-                        headers=headers,
-                        content=await request.body() if request.method in ["POST", "PUT", "PATCH"] else None,
-                    )
-                    return Response(
-                        content=response.content,
-                        status_code=response.status_code,
-                        headers=dict(response.headers)
-                    )
-        
-        # Root endpoint - proxy to /sse
-        @app.get("/")
-        @app.post("/")
-        @app.head("/")
-        async def root_endpoint(request: Request):
-            """Root endpoint - proxy to MCP /sse"""
-            return await proxy_sse_to_mcp(request, "/sse")
-        
-        # /mcp endpoint - also proxy to /sse
-        @app.get("/mcp")
-        @app.post("/mcp")
-        async def mcp_endpoint(request: Request):
-            """MCP endpoint - proxy to MCP /sse"""
-            return await proxy_sse_to_mcp(request, "/sse")
-        
-        # /sse endpoint - direct proxy
-        @app.get("/sse")
-        @app.post("/sse")
-        async def sse_endpoint(request: Request):
-            """SSE endpoint - direct proxy"""
-            return await proxy_sse_to_mcp(request, "/sse")
-        
-        # /messages/* endpoint - proxy with path
-        @app.post("/messages/{path:path}")
-        async def messages_endpoint(path: str, request: Request):
-            """Messages endpoint - proxy to MCP"""
-            return await proxy_sse_to_mcp(request, f"/messages/{path}")
-        
-        logger.info(f"HTTP/SSE proxy mode enabled: Proxying to MCP server at {MCP_INTERNAL_URL}")
+# SSE Endpoints for MCP over SSE
+@app.get("/sse")
+@app.get("/")
+@app.get("/mcp")
+async def sse_endpoint(request: Request):
+    """MCP over SSE endpoint"""  
+    
+    # Security checks
+    try:
+        await verify_origin(request)
+        await verify_oauth_or_api_key(request)
+        await enforce_https(request)
+    except HTTPException as e:
+        return Response(status_code=e.status_code, content=e.detail)
+    
+    # Create new SSE connection
+    connection_id = str(uuid.uuid4())
+    connection = MCPSSEConnection(connection_id)
+    sse_connections[connection_id] = connection
+    
+    logger.info(f"New SSE connection: {connection_id}")
+    
+    # Return SSE stream
+    return StreamingResponse(
+        connection.stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
-# Message handling is done via FastMCP's SSE app
+@app.post("/messages/{path:path}")
+async def handle_mcp_message(path: str, request: Request):
+    """Handle MCP messages sent via POST"""
+    
+    # Security checks
+    try:
+        await verify_origin(request)
+        await verify_oauth_or_api_key(request)
+        await enforce_https(request)
+    except HTTPException as e:
+        return Response(status_code=e.status_code, content=e.detail)
+    
+    try:
+        # Get message from request body
+        body = await request.body()
+        message = json.loads(body.decode())
+        
+        logger.debug(f"Received MCP message: {message}")
+        
+        # Process MCP message using FastMCP
+        # For now, return a simple response
+        response = {
+            "jsonrpc": "2.0",
+            "id": message.get("id"),
+            "result": {"status": "received", "path": path}
+        }
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error handling MCP message: {e}")
+        return Response(status_code=500, content=f"Error: {str(e)}")
 
 
 def validate_date(date_str: str) -> str:
@@ -1201,57 +1195,18 @@ else:
 
 # Run the server
 if __name__ == "__main__":
-    # Check run mode
-    if "--stdio" in sys.argv or os.getenv("MCP_MODE") == "stdio":
+    # Check if we should run as HTTP server or stdio
+    if len(sys.argv) > 1 and sys.argv[1] == "--stdio":
         # Run as stdio server (backwards compatibility)
         logger.info("Starting MCP server in stdio mode")
         mcp.run()
-    elif "--mcp-only" in sys.argv:
-        # Run as MCP SSE server only (no OAuth, no proxy)
-        import uvicorn
-        MCP_INTERNAL_PORT = int(os.getenv("MCP_INTERNAL_PORT", "9001"))
-        
-        logger.info(f"Starting MCP-only SSE server on port {MCP_INTERNAL_PORT}")
-        logger.info("This server handles MCP protocol only, no authentication")
-        
-        # Get the SSE app from FastMCP
-        mcp_app = mcp.sse_app()
-        
-        # Run with uvicorn
-        uvicorn.run(
-            mcp_app,
-            host="127.0.0.1",  # Only listen on localhost for security
-            port=MCP_INTERNAL_PORT,
-            log_level="info"
-        )
+    elif os.getenv("MCP_MODE") == "stdio":
+        # Run as stdio server when MCP_MODE is set
+        logger.info("Starting MCP server in stdio mode (from MCP_MODE env var)")
+        mcp.run()
     else:
-        # Run as full HTTP server with OAuth and proxy
+        # Run as HTTP server with SSE support
         import uvicorn
-        
-        # Check if MCP server is running
-        MCP_INTERNAL_PORT = int(os.getenv("MCP_INTERNAL_PORT", "9001"))
-        MCP_INTERNAL_URL = f"http://localhost:{MCP_INTERNAL_PORT}"
-        
-        # Start MCP server in subprocess if AUTO_START_MCP is enabled
-        mcp_process = None
-        if os.getenv("AUTO_START_MCP", "true").lower() == "true":
-            import subprocess
-            logger.info(f"Auto-starting MCP server on port {MCP_INTERNAL_PORT}...")
-            mcp_process = subprocess.Popen(
-                [sys.executable, __file__, "--mcp-only"],
-                env={**os.environ, "MCP_INTERNAL_PORT": str(MCP_INTERNAL_PORT)}
-            )
-            # Wait a bit for MCP server to start
-            import time
-            time.sleep(2)
-        
-        try:
-            logger.info(f"Starting Intervals.icu HTTP/OAuth server on {HOST}:{PORT}")
-            logger.info(f"Proxying MCP requests to {MCP_INTERNAL_URL}")
-            uvicorn.run(app, host=HOST, port=PORT)
-        finally:
-            # Clean up MCP subprocess if started
-            if mcp_process:
-                logger.info("Stopping MCP server...")
-                mcp_process.terminate()
-                mcp_process.wait()
+
+        logger.info(f"Starting Intervals.icu MCP server in HTTP/SSE mode on {HOST}:{PORT}")
+        uvicorn.run(app, host=HOST, port=PORT)

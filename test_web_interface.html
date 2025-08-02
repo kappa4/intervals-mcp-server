@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intervals.icu MCP Server Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        .endpoint { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+        }
+        .result { 
+            background: #f5f5f5; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 3px; 
+            white-space: pre-wrap; 
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+        }
+        button:hover { background: #0056b3; }
+        .error { background: #ffe6e6; border-color: #ff9999; }
+        .success { background: #e6ffe6; border-color: #99ff99; }
+    </style>
+</head>
+<body>
+    <h1>Intervals.icu MCP Server Test Interface</h1>
+    <p>This interface tests the Remote MCP server endpoints for Claude Desktop integration.</p>
+
+    <div class="endpoint">
+        <h3>1. Health Check</h3>
+        <button onclick="testEndpoint('/health', 'health-result')">Test Health</button>
+        <div id="health-result" class="result"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>2. OAuth Protected Resource Metadata</h3>
+        <button onclick="testEndpoint('/.well-known/oauth-protected-resource', 'oauth-result')">Test OAuth Discovery</button>
+        <div id="oauth-result" class="result"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>3. Authorization Server Metadata</h3>
+        <button onclick="testEndpoint('/.well-known/oauth-authorization-server', 'auth-result')">Test Auth Server</button>
+        <div id="auth-result" class="result"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>4. JWKS Endpoint</h3>
+        <button onclick="testEndpoint('/.well-known/jwks.json', 'jwks-result')">Test JWKS</button>
+        <div id="jwks-result" class="result"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>5. SSE Endpoint (with API Key)</h3>
+        <button onclick="testSSE()">Test SSE Connection</button>
+        <div id="sse-result" class="result"></div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://localhost:9000';
+        const API_KEY = 'test_key_for_claude_desktop';
+
+        async function testEndpoint(path, resultId) {
+            const resultDiv = document.getElementById(resultId);
+            resultDiv.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch(SERVER_URL + path);
+                const data = await response.json();
+                
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = 'result success';
+            } catch (error) {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        async function testSSE() {
+            const resultDiv = document.getElementById('sse-result');
+            resultDiv.textContent = 'Testing SSE connection...';
+            
+            try {
+                const response = await fetch(SERVER_URL + '/sse', {
+                    headers: {
+                        'X-API-Key': API_KEY,
+                        'Origin': 'https://claude.ai'
+                    }
+                });
+                
+                if (response.ok) {
+                    resultDiv.textContent = 'SSE connection successful!\nStatus: ' + response.status;
+                    resultDiv.className = 'result success';
+                } else {
+                    const errorText = await response.text();
+                    resultDiv.textContent = 'SSE connection failed!\nStatus: ' + response.status + '\nError: ' + errorText;
+                    resultDiv.className = 'result error';
+                }
+            } catch (error) {
+                resultDiv.textContent = 'SSE Error: ' + error.message;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            testEndpoint('/health', 'health-result');
+            setTimeout(() => testEndpoint('/.well-known/oauth-protected-resource', 'oauth-result'), 500);
+            setTimeout(() => testEndpoint('/.well-known/oauth-authorization-server', 'auth-result'), 1000);
+            setTimeout(() => testEndpoint('/.well-known/jwks.json', 'jwks-result'), 1500);
+        };
+    </script>
+</body>
+</html>
