@@ -1,5 +1,10 @@
 # Railway デプロイ手順書
 
+## 構成
+- **メインファイル**: `app.py` (動作確認済みの統合サーバー)
+- **起動方法**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- **機能**: OAuth 2.1 + MCP プロトコル統合
+
 ## 1. Railway アカウント準備
 
 1. https://railway.app でアカウント作成（GitHub連携推奨）
@@ -13,11 +18,11 @@
 3. `intervals-mcp-server` リポジトリを選択
 4. 「Deploy Now」をクリック
 
-## 3. 環境変数設定
+## 3. 環境変数設定（重要！）
 
-Railway ダッシュボードで以下の環境変数を設定：
+Railway ダッシュボードの「Variables」タブで以下を設定：
 
-### 必須設定
+### 必須設定（これらが無いとサーバーが起動しません）
 ```
 ATHLETE_ID=i123456
 API_KEY=your_intervals_icu_api_key

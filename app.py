@@ -1,47 +1,25 @@
 #!/usr/bin/env python3
 """
-Intervals.icu MCP Server - Production Version
+Intervals.icu MCP Server - Production App
 
-A Model Context Protocol (MCP) server that provides access to Intervals.icu API
-with OAuth 2.1 authentication and FastMCP integration.
+Production-ready integrated MCP server with OAuth 2.1 authentication.
+Based on the proven simple_integrated.py that successfully connects with Claude.ai.
 
-This implementation follows MCP specification and uses proven architecture
-that successfully connects with Claude.ai.
-
-Environment Variables Required:
-- ATHLETE_ID: Your Intervals.icu athlete ID (e.g., i123456)
-- API_KEY: Your Intervals.icu API key
-- MCP_API_KEY: API key for MCP authentication (fallback)
-- JWT_SECRET_KEY: Secret key for JWT token signing (minimum 32 characters)
-- BASE_URL: Public URL of your server (for OAuth callbacks)
-- PORT: Server port (default: 8000)
-- ALLOWED_ORIGINS: CORS allowed origins (default: *)
+Features:
+- OAuth 2.1 authentication with PKCE support
+- MCP (Model Context Protocol) over SSE transport
+- Integration with Intervals.icu API
+- Environment variable validation
+- Production logging and monitoring
 """
 
 import os
 import sys
 import logging
-from typing import Optional
-
-# Add src directory to Python path for Railway deployment
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-from fastapi import Request, Form
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("intervals_mcp_production")
-
-# Import the existing MCP server and FastAPI app from intervals_mcp_server
-# This maintains all the working tool implementations and middleware
-from intervals_mcp_server.server import mcp, app
-
-# Import OAuth functionality
-from intervals_mcp_server.oauth import (
-    register_oauth_client,
-    handle_authorization_request,
-    handle_token_request,
-)
 
 def validate_environment():
     """Validate that required environment variables are set."""
@@ -72,7 +50,25 @@ def validate_environment():
 
     logger.info("Environment validation passed")
 
-# Add OAuth endpoints to the existing FastAPI app
+# Validate environment on import
+validate_environment()
+
+# Import the existing mcp instance and app from server.py
+# This path works in Railway's flat deployment structure
+from intervals_mcp_server.server import mcp, app
+
+# Additional imports for OAuth endpoints
+from fastapi import Request, Form
+from typing import Optional
+
+# Import OAuth functions
+from intervals_mcp_server.oauth import (
+    register_oauth_client,
+    handle_authorization_request,
+    handle_token_request,
+)
+
+# OAuth endpoints
 @app.post("/oauth/register")
 async def oauth_client_registration(request: Request):
     """Dynamic Client Registration endpoint for OAuth 2.1."""
@@ -104,10 +100,10 @@ async def oauth_token_endpoint(
         scope=scope,
     )
 
-# Get FastMCP's SSE application
+# Get the SSE app from FastMCP
 sse_app = mcp.sse_app()
 
-# Integrate SSE endpoints with the existing FastAPI app
+# Mount SSE endpoints on the existing FastAPI app
 # This uses the exact same pattern that successfully works with Claude.ai
 @app.get("/")
 @app.post("/")
@@ -115,11 +111,8 @@ sse_app = mcp.sse_app()
 async def root_sse_endpoint(request: Request):
     """
     Root endpoint serves MCP SSE transport.
-
-    This endpoint handles the primary MCP communication channel.
-    Authentication is handled by middleware in the main app.
-
-    Uses the proven pattern: request.send.__wrapped__
+    
+    This uses the proven pattern: request.send.__wrapped__
     """
     return await sse_app(request.scope, request.receive, request.send.__wrapped__)
 
@@ -135,19 +128,19 @@ async def mcp_endpoint(request: Request):
     """MCP endpoint for protocol compatibility."""
     return await sse_app(request.scope, request.receive, request.send.__wrapped__)
 
+# Messages endpoint for MCP protocol
 @app.post("/messages/{path:path}")
 async def messages_endpoint(path: str, request: Request):
     """
     MCP protocol messages endpoint.
-
+    
     Handles MCP JSON-RPC messages with proper session management.
-    The path parameter allows for session-specific routing with session_id.
     """
     # Update request scope to include the full path for proper routing
     request.scope["path"] = f"/messages/{path}"
     return await sse_app(request.scope, request.receive, request.send.__wrapped__)
 
-# Health check endpoint for monitoring
+# Enhanced health check endpoint
 @app.get("/health")
 async def health_check():
     """Health check endpoint for load balancers and monitoring systems."""
@@ -156,7 +149,9 @@ async def health_check():
         "service": "intervals-mcp-server",
         "version": "1.0.0",
         "athlete_id": os.getenv("ATHLETE_ID", "not_configured"),
-        "base_url": os.getenv("BASE_URL", "not_configured")
+        "base_url": os.getenv("BASE_URL", "not_configured"),
+        "oauth_enabled": True,
+        "mcp_protocol": "2024-11-05"
     }
 
 # Configuration endpoint for debugging
@@ -171,40 +166,25 @@ async def config_info():
         "mcp_api_key_set": bool(os.getenv("MCP_API_KEY")),
         "intervals_api_key_set": bool(os.getenv("API_KEY")),
         "jwt_secret_set": bool(os.getenv("JWT_SECRET_KEY")),
+        "oauth_endpoints": ["/oauth/register", "/oauth/authorize", "/oauth/token"],
+        "mcp_endpoints": ["/", "/sse", "/mcp", "/messages"]
     }
 
-def main():
-    """Main entry point for the application."""
-
-    # Validate environment before starting
-    validate_environment()
-
+# Main entry point for development/testing
+if __name__ == "__main__":
     import uvicorn
     
-    # Configuration from environment variables
-    PORT = int(os.getenv("PORT", "8000"))  # Default to 8000 for production
+    PORT = int(os.getenv("PORT", "8000"))
     HOST = os.getenv("HOST", "0.0.0.0")
-
-    # Check for stdio mode (backwards compatibility)
+    
     if "--stdio" in sys.argv or os.getenv("MCP_MODE") == "stdio":
         logger.info("Starting MCP server in stdio mode")
         mcp.run()
     else:
-        # Production HTTP/SSE server mode
         logger.info(f"Starting Intervals.icu MCP Server on {HOST}:{PORT}")
         logger.info(f"Athlete ID: {os.getenv('ATHLETE_ID')}")
         logger.info(f"Base URL: {os.getenv('BASE_URL')}")
         logger.info("OAuth 2.1 authentication and MCP protocol integrated")
         logger.info("Ready for Claude.ai connections")
-
-        # Run with production-ready uvicorn configuration
-        uvicorn.run(
-            app,
-            host=HOST,
-            port=PORT,
-            log_level="info",
-            access_log=True,
-        )
-
-if __name__ == "__main__":
-    main()
+        
+        uvicorn.run(app, host=HOST, port=PORT, log_level="info", access_log=True)
