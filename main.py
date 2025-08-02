@@ -23,6 +23,9 @@ import sys
 import logging
 from typing import Optional
 
+# Add src directory to Python path for Railway deployment
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
 from fastapi import Request, Form
 
 # Set up logging
