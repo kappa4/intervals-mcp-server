@@ -38,15 +38,16 @@ intervals-mcp-serverのパフォーマンス向上を目的とした、ウェル
 
 ### キー設計
 ```typescript
+// バージョンプレフィックスを含むキー設計
 const CACHE_KEYS = {
   wellness: (athleteId: string, dateRange: string) => 
-    `wellness:${athleteId}:${dateRange}`,
+    CacheVersionManager.getCacheKey(`wellness:${athleteId}:${dateRange}`),
   activities: (athleteId: string, dateRange: string) => 
-    `activities:${athleteId}:${dateRange}`,
+    CacheVersionManager.getCacheKey(`activities:${athleteId}:${dateRange}`),
   athlete: (athleteId: string) => 
-    `athlete:${athleteId}`,
+    CacheVersionManager.getCacheKey(`athlete:${athleteId}`),
   metadata: (key: string) => 
-    `meta:${key}`
+    CacheVersionManager.getCacheKey(`meta:${key}`)
 };
 ```
 
@@ -81,13 +82,15 @@ const TTL_CONFIG = {
 **成果物:**
 - `cache/cache-types.ts` - キャッシュ専用型定義
 - `cache/cache-config.ts` - 設定・定数定義
+- `cache/cache-version-manager.ts` - バージョン管理機能
 - キー設計仕様の確定
 
 **主要作業:**
 1. Deno KV API仕様・制限事項の詳細調査
 2. 既存UCRIntervalsClientの実装パターン分析
-3. キャッシュキー命名規則の設計
+3. キャッシュキー命名規則の設計（バージョン対応）
 4. 型定義・インターフェース設計
+5. バージョン管理機能の実装
 
 ### Phase 2: 基本キャッシュ実装
 
@@ -162,10 +165,11 @@ const TTL_CONFIG = {
 
 ```
 cache/
-├── wellness-cache.ts      # メインキャッシュクラス
-├── cache-types.ts         # キャッシュ専用型定義
-├── cache-config.ts        # 設定・定数
-└── cache-utils.ts         # ユーティリティ関数
+├── wellness-cache.ts        # メインキャッシュクラス
+├── cache-types.ts           # キャッシュ専用型定義
+├── cache-config.ts          # 設定・定数
+├── cache-utils.ts           # ユーティリティ関数
+└── cache-version-manager.ts # バージョン管理とキー生成
 
 tests/
 ├── unit/cache/
@@ -226,6 +230,30 @@ tests/
 **採用理由**: UCRCalculatorの複雑な計算パターンに最適化可能
 **実装戦略**: 段階的実装でリスク軽減（シンプル→インテリジェント）
 
+### デプロイ時のキャッシュ管理戦略
+```typescript
+// cache/cache-version-manager.ts
+export class CacheVersionManager {
+  private static VERSION_KEY = 'DEPLOY_VERSION';
+  
+  // バージョン対応キャッシュキー生成
+  static getCacheKey(baseKey: string): string {
+    const version = Deno.env.get(this.VERSION_KEY) || 'v1';
+    return `${version}:${baseKey}`;
+  }
+  
+  // 新バージョン生成（デプロイ時使用）
+  static generateNewVersion(): string {
+    return `v${Date.now()}`;
+  }
+  
+  // 旧バージョンキャッシュの検出
+  static async cleanupOldVersions(kv: Deno.Kv, currentVersion: string) {
+    // 実装詳細はPhase 4で
+  }
+}
+```
+
 ### 無効化戦略
 ```typescript
 interface CacheInvalidationStrategy {
@@ -237,6 +265,9 @@ interface CacheInvalidationStrategy {
   
   // 統計ベースTTL調整
   adjustTTL: (key: string, accessPattern: AccessPattern) => number;
+  
+  // バージョンベース無効化
+  invalidateByVersion: (oldVersion: string) => Promise<void>;
 }
 ```
 
@@ -281,6 +312,8 @@ CACHE_TTL_WELLNESS=3600        # ウェルネスデータTTL（秒）
 CACHE_TTL_ACTIVITIES=1800      # アクティビティデータTTL（秒）
 CACHE_TTL_ATHLETE=86400        # アスリート情報TTL（秒）
 CACHE_DEBUG=false              # キャッシュデバッグログ
+DEPLOY_VERSION=v1              # デプロイバージョン
+CACHE_VERSION_STRATEGY=auto    # auto|manual|fixed
 ```
 
 ### 開発・テストコマンド
@@ -337,6 +370,7 @@ deno test --allow-net --allow-env --unstable-kv --coverage=coverage
 - [ ] キャッシュキー命名規則設計
 - [ ] `cache-types.ts` 型定義作成
 - [ ] `cache-config.ts` 設定ファイル作成
+- [ ] `cache-version-manager.ts` バージョン管理機能作成
 
 ### Phase 2: 基本キャッシュ実装
 - [ ] `wellness-cache.ts` 基本クラス実装
