@@ -18,7 +18,8 @@ import sys
 import logging
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
 logger = logging.getLogger("intervals_mcp_production")
 
 def validate_environment():
@@ -48,7 +49,7 @@ def validate_environment():
         logger.error("JWT_SECRET_KEY must be at least 32 characters long")
         sys.exit(1)
 
-    logger.info("Environment validation passed")
+    logger.debug("Environment validation passed")
 
 # Validate environment on import
 validate_environment()
@@ -186,9 +187,9 @@ if __name__ == "__main__":
         mcp.run()
     else:
         logger.info(f"Starting Intervals.icu MCP Server on {HOST}:{PORT}")
-        logger.info(f"Athlete ID: {os.getenv('ATHLETE_ID')}")
-        logger.info(f"Base URL: {os.getenv('BASE_URL')}")
-        logger.info("OAuth 2.1 authentication and MCP protocol integrated")
+        logger.debug(f"Athlete ID: {os.getenv('ATHLETE_ID')}")
+        logger.debug(f"Base URL: {os.getenv('BASE_URL')}")
+        logger.debug("OAuth 2.1 authentication and MCP protocol integrated")
         logger.info("Ready for Claude.ai connections")
         
         uvicorn.run(app, host=HOST, port=PORT, log_level="info", access_log=True)

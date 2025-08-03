@@ -93,8 +93,9 @@ except ImportError:
     pass
 
 # Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
@@ -286,7 +287,7 @@ if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio":
             """Messages endpoint - proxy to MCP"""
             return await proxy_sse_to_mcp(request, f"/messages/{path}")
         
-        logger.info(f"HTTP/SSE proxy mode enabled: Proxying to MCP server at {MCP_INTERNAL_URL}")
+        logger.debug(f"HTTP/SSE proxy mode enabled: Proxying to MCP server at {MCP_INTERNAL_URL}")
 
 # Message handling is done via FastMCP's SSE app
 
@@ -1193,8 +1194,8 @@ async def oauth_token_endpoint(
 
 # HTTP/SSE mode setup
 if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio":
-    logger.info("HTTP/SSE mode enabled: MCP over SSE endpoints available at /, /sse, /mcp")
-    logger.info("Message handling endpoint: POST /messages/{path}")
+    logger.debug("HTTP/SSE mode enabled: MCP over SSE endpoints available at /, /sse, /mcp")
+    logger.debug("Message handling endpoint: POST /messages/{path}")
 else:
     logger.info("stdio mode enabled: SSE endpoints disabled")
 
