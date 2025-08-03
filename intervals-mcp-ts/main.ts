@@ -37,7 +37,7 @@ function validateEnvironment(): void {
   if (missing.length > 0) {
     error("Missing required environment variables:");
     missing.forEach(msg => error(`  ${msg}`));
-    Deno.exit(1);
+    throw new Error("Missing required environment variables. Please check the logs above.");
   }
 
   info("Environment validation passed");
