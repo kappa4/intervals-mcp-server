@@ -10,6 +10,7 @@ import {
   UCRWithTrend,
   UCRComponents,
   UCRModifiers,
+  ModifierDetail,
   BaselineData,
   TrendResult,
   TrainingRecommendation,
@@ -63,7 +64,7 @@ const DEFAULT_UCR_CONFIG: UCRConfig = {
     sleepDebt: -15,
     injuryModerate: -15,
     injuryLight: -5,
-    motivationLow: -5
+    motivationLow: 0.9
   },
   trend: {
     momentum: {
@@ -147,6 +148,11 @@ export class UCRCalculator {
     this.config = { ...DEFAULT_UCR_CONFIG, ...config };
   }
 
+  // Get current configuration (for testing)
+  public getConfig(): UCRConfig {
+    return this.config;
+  }
+
   /**
    * UCRスコアを計算する
    */
@@ -176,19 +182,36 @@ export class UCRCalculator {
     const baseScore = Object.values(components).reduce((sum: number, score: number) => sum + score, 0);
     
     // 修正因子の適用
-    const { finalScore, modifiers } = this.applyModifiers(baseScore, subjectiveData, historical);
+    const { finalScore, modifiers, multiplier } = this.applyModifiers(baseScore, subjectiveData, historical);
     
     // 推奨事項
     const recommendation = this.getTrainingRecommendation(finalScore);
     
-    return {
+    // データ品質の評価
+    const dataQuality = this.evaluateDataQuality(baselines, historical);
+    
+    const result: UCRResult = {
       score: Math.round(finalScore),
       baseScore: Math.round(baseScore),
       components,
-      modifiers,
+      modifiers: Object.keys(modifiers).length > 0 ? modifiers : undefined,
+      multiplier: multiplier !== 1.0 ? multiplier : undefined,
       recommendation,
-      baselines: options?.includeDebugInfo ? baselines : undefined
+      trainingRecommendation: recommendation.action, // テスト互換性
+      confidence: dataQuality.confidence,
+      baselines: options?.includeDebugInfo ? baselines : undefined,
+      dataQuality: dataQuality.quality
     };
+    
+    // デバッグ情報の追加
+    if (options?.includeDebugInfo) {
+      result.debugInfo = {
+        parasympatheticSaturation: this.detectParasympatheticSaturation(current.hrv || 0, current.rhr || 0, baselines),
+        baselines
+      };
+    }
+    
+    return result;
   }
 
   /**
@@ -358,8 +381,10 @@ export class UCRCalculator {
       return this.config.scoreWeights.sleep * 0.5;
     }
 
-    // Garmin睡眠スコアの線形スケーリング
-    return (sleepScore / 100) * this.config.scoreWeights.sleep;
+    // Garmin睡眠スコアの線形スケーリング (0-100を0-20にマップ)
+    // 負の値は0にクリップ、100超は100にクリップ
+    const clippedScore = Math.max(0, Math.min(100, sleepScore));
+    return (clippedScore / 100) * this.config.scoreWeights.sleep;
   }
 
   private calculateSubjectiveScore(subjectiveData: any): number {
@@ -402,74 +427,125 @@ export class UCRCalculator {
     return conversionMap ? conversionMap[icuValue] || 3 : 3;
   }
 
-  private applyModifiers(baseScore: number, subjectiveData: any, historicalData: WellnessData[]): { finalScore: number; modifiers: UCRModifiers } {
+  private applyModifiers(baseScore: number, subjectiveData: any, historicalData: WellnessData[]): { finalScore: number; modifiers: UCRModifiers; multiplier: number } {
     let finalScore = baseScore;
-    
-    const modifiers: UCRModifiers = {
-      alcohol: subjectiveData.alcohol,
-      muscleSoreness: subjectiveData.soreness,
-      injury: subjectiveData.injury,
-      motivation: subjectiveData.motivation,
-      sleepDebt: this.calculateSleepDebt(historicalData)
-    };
+    let totalMultiplier = 1.0;
+    const modifiers: UCRModifiers = {};
 
     // 筋肉痛修正
     if (subjectiveData.soreness === 1) {
-      finalScore *= this.config.penalties.muscleSorenessSevere;
+      const multiplier = this.config.penalties.muscleSorenessSevere;
+      totalMultiplier *= multiplier;
+      modifiers.muscleSoreness = {
+        applied: true,
+        value: multiplier,
+        reason: "Severe muscle soreness"
+      };
     } else if (subjectiveData.soreness === 2) {
-      finalScore *= this.config.penalties.musclesorenessModerate;
+      const multiplier = this.config.penalties.musclesorenessModerate;
+      totalMultiplier *= multiplier;
+      modifiers.muscleSoreness = {
+        applied: true,
+        value: multiplier,
+        reason: "Moderate muscle soreness"
+      };
     } else if (subjectiveData.soreness === 3) {
-      finalScore *= 0.9;
+      const multiplier = 0.9;
+      totalMultiplier *= multiplier;
+      modifiers.muscleSoreness = {
+        applied: true,
+        value: multiplier,
+        reason: "Mild muscle soreness"
+      };
     }
 
     // アルコール修正
-    if (subjectiveData.alcohol === 1) {
-      finalScore *= this.config.penalties.alcoholLight;
+    if (subjectiveData.alcohol === true || subjectiveData.alcohol === 1) {
+      const multiplier = this.config.penalties.alcoholLight;
+      totalMultiplier *= multiplier;
+      modifiers.alcohol = {
+        applied: true,
+        value: multiplier,
+        reason: "Alcohol consumed"
+      };
     } else if (subjectiveData.alcohol === 2) {
-      finalScore *= this.config.penalties.alcoholHeavy;
+      const multiplier = this.config.penalties.alcoholHeavy;
+      totalMultiplier *= multiplier;
+      modifiers.alcohol = {
+        applied: true,
+        value: multiplier,
+        reason: "Heavy alcohol consumption"
+      };
     }
 
     // 睡眠負債修正
-    if (modifiers.sleepDebt > 0) {
-      const sleepDebtMultiplier = Math.max(0.7, 1 - 0.05 * modifiers.sleepDebt);
-      finalScore *= sleepDebtMultiplier;
+    const sleepDebt = this.calculateSleepDebt(historicalData);
+    if (sleepDebt > 0) {
+      const sleepDebtMultiplier = Math.max(0.7, 1 - 0.05 * sleepDebt);
+      totalMultiplier *= sleepDebtMultiplier;
+      modifiers.sleepDebt = {
+        applied: true,
+        value: sleepDebtMultiplier,
+        reason: `Sleep debt: ${sleepDebt.toFixed(1)} hours`
+      };
     }
 
-    // モチベーション修正
+    // モチベーション修正（内部値で判定: 1-2 = 低い）
     if (subjectiveData.motivation <= 2) {
-      finalScore *= 0.9;
+      const multiplier = this.config.penalties.motivationLow;
+      totalMultiplier *= multiplier;
+      modifiers.motivation = {
+        applied: true,
+        value: multiplier,
+        reason: "Low motivation"
+      };
     }
 
-    // ケガのハードキャップ
+    // 修正子を適用
+    finalScore *= totalMultiplier;
+
+    // ケガのハードキャップ（multiplierには含めない）
     if (subjectiveData.injury === 1) {
       finalScore = Math.min(finalScore, 30);
+      modifiers.injury = {
+        applied: true,
+        value: 30,
+        reason: "Significant injury - training not recommended"
+      };
     } else if (subjectiveData.injury === 2) {
       finalScore = Math.min(finalScore, 50);
+      modifiers.injury = {
+        applied: true,
+        value: 50,
+        reason: "Moderate injury present"
+      };
     } else if (subjectiveData.injury === 3) {
       finalScore = Math.min(finalScore, 70);
+      modifiers.injury = {
+        applied: true,
+        value: 70,
+        reason: "Minor injury present"
+      };
     }
 
     return {
-      finalScore: Math.max(0, Math.min(100, finalScore)),
-      modifiers
+      finalScore: Math.max(0, Math.min(100, Math.round(finalScore))),
+      modifiers,
+      multiplier: totalMultiplier
     };
   }
 
   private calculateSleepDebt(historicalData: WellnessData[]): number {
-    const now = new Date();
-    const recentDays = historicalData
-      .filter(d => {
-        const date = new Date(d.date);
-        const daysDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
-        return daysDiff <= this.config.sleep.debtDays;
-      })
-      .slice(-this.config.sleep.debtDays);
+    // 直近3日間のデータを取得（最新のデータから）
+    const recentDays = historicalData.slice(-this.config.sleep.debtDays);
 
     let totalDebt = 0;
     recentDays.forEach(d => {
-      const sleepHours = d.sleepHours || 0;
-      const debt = Math.max(0, this.config.sleep.targetHours - sleepHours);
-      totalDebt += debt;
+      const sleepHours = d.sleepHours;
+      if (sleepHours !== undefined) {  // 睡眠データがある場合のみ計算（0時間も有効）
+        const debt = Math.max(0, this.config.sleep.targetHours - sleepHours);
+        totalDebt += debt;
+      }
     });
 
     return totalDebt;
@@ -534,7 +610,7 @@ export class UCRCalculator {
       return {
         momentum: momentumResult?.value || 0,
         volatility: volatilityResult?.value || 0,
-        volatilityLevel: volatilityResult?.level || 'MODERATE',
+        volatilityLevel: (volatilityResult?.level || 'MODERATE') as 'LOW' | 'MODERATE' | 'HIGH',
         volatilityBandPosition: volatilityResult?.bandPosition || 0,
         trendState,
         trendStateCode,
@@ -607,20 +683,16 @@ export class UCRCalculator {
     // ROC（Rate of Change）計算
     const momentum = ((currentScore - pastScore) / pastScore) * 100;
     
-    // カテゴリ分類
+    // カテゴリ分類（基本マトリクス用3段階）
     let category: string;
     const thresholds = this.config.trend.momentum.thresholds;
     
-    if (momentum >= thresholds.strongPositive) {
+    if (momentum >= thresholds.positive) {
       category = 'POSITIVE';
-    } else if (momentum <= thresholds.strongNegative) {
-      category = 'NEGATIVE';
-    } else if (momentum > thresholds.positive) {
-      category = 'POSITIVE';
-    } else if (momentum < thresholds.negative) {
-      category = 'NEGATIVE';
-    } else {
+    } else if (momentum > thresholds.negative) {
       category = 'NEUTRAL';
+    } else {
+      category = 'NEGATIVE';
     }
     
     return {
@@ -752,7 +824,137 @@ export class UCRCalculator {
   }
 
   private generateInterpretation(ucrScore: number, momentum: number, volatility: number, volatilityLevel: string, trendState: string): string {
-    // 基本情報
+    // ボラティリティレベルに応じた詳細な解釈マトリクス（GAS版から移植）
+    const volatilityInterpretations: {[key: string]: {[key: string]: {assessment: string, detail: string}}} = {
+      'スーパーコンペンセーション/ピーキング': {
+        LOW: {
+          assessment: '理想的なピーキング',
+          detail: '適応プロセスが非常に安定しており、パフォーマンスの再現性が高い。自信を持ってレースに臨める状態。'
+        },
+        MODERATE: {
+          assessment: '良好なピーキング',
+          detail: '準備状態は高く、上昇傾向にあり、変動も平常範囲内。計画通りのパフォーマンスが期待できる。'
+        },
+        HIGH: {
+          assessment: '不安定なピーク',
+          detail: 'スコアは高いが日々の変動が大きく、コンディションが脆い可能性。ピークが持続しない、またはレース当日に下振れするリスクを考慮。'
+        }
+      },
+      '安定した適応': {
+        LOW: {
+          assessment: '真の安定',
+          detail: '持続可能な好調状態。現在のトレーニング負荷が適切であることの強い証拠。'
+        },
+        MODERATE: {
+          assessment: '標準的な安定状態',
+          detail: '高い準備状態を維持できている。日々の多少の変動は正常な反応の範囲内。'
+        },
+        HIGH: {
+          assessment: '見せかけの安定',
+          detail: '平均スコアは高いが、コンディションは不安定。いつ崩れてもおかしくない状態。トレーニング外のストレス要因を調査する必要がある。'
+        }
+      },
+      '疲労の兆候/早期テーパー': {
+        LOW: {
+          assessment: '計画的な下降',
+          detail: '負荷は高いが、身体は一貫して反応している。計画的なテーパーの初期段階である可能性。ただし、下降トレンドの継続には注意。'
+        },
+        MODERATE: {
+          assessment: '標準的な疲労の兆候',
+          detail: 'スコアが下降しており、変動も平常範囲内。典型的な疲労蓄積のサイン。負荷のモニタリングと調整が必要。'
+        },
+        HIGH: {
+          assessment: '危険な下降',
+          detail: 'スコアの下降に加え日々の変動も大きく、急速な不適応状態に陥っている可能性が高い。非機能的オーバーリーチングへの移行リスクが非常に高い。即時介入が必要。'
+        }
+      },
+      '生産的なリバウンド': {
+        LOW: {
+          assessment: '信頼性の高い回復',
+          detail: '回復プロセスが安定しており、順調な適応が進んでいる。トレーニング負荷を徐々に戻していくのに最適な状態。'
+        },
+        MODERATE: {
+          assessment: '標準的な回復',
+          detail: '疲労から順調に回復している。日々の変動は正常な回復プロセスの一部。計画通り負荷を戻して良い。'
+        },
+        HIGH: {
+          assessment: '不安定な回復',
+          detail: '回復傾向にはあるが、プロセスが不安定。回復を妨げる要因がないか確認し、負荷を戻すのはより慎重に行うべき。'
+        }
+      },
+      '均衡状態': {
+        LOW: {
+          assessment: '安定したベースライン',
+          detail: '良くも悪くも安定している。ベーストレーニングを継続するのに適している。'
+        },
+        MODERATE: {
+          assessment: '典型的な均衡状態',
+          detail: '標準的な準備状態と標準的な変動。トレーニング負荷と回復が釣り合っている状態。'
+        },
+        HIGH: {
+          assessment: '潜在的な不安定性',
+          detail: '平均的には均衡しているが、日々のコンディションは揺れている。トレーニング外の要因が影響しているか、現在のトレーニング負荷が微妙に合っていない可能性を示唆。'
+        }
+      },
+      '機能的オーバーリーチング': {
+        LOW: {
+          assessment: '計画通りの過負荷',
+          detail: '身体はストレス下にあるが、一貫した形で対応できている。その後の超回復が期待できる、質の高い過負荷状態。'
+        },
+        MODERATE: {
+          assessment: '標準的な過負荷',
+          detail: '計画的な過負荷に対する正常な反応。身体はストレス下にあるが、平常の範囲内で対応できている。'
+        },
+        HIGH: {
+          assessment: '非機能的への移行リスク',
+          detail: '身体の適応能力を超えている危険なサイン。即時の負荷軽減や回復措置を検討すべき。'
+        }
+      },
+      '回復進行中': {
+        LOW: {
+          assessment: '着実な回復',
+          detail: '底を打ち、安定した軌道で回復している。良い兆候。回復を継続することが重要。'
+        },
+        MODERATE: {
+          assessment: '標準的な回復初期',
+          detail: '回復軌道に乗っているが、まだ多少の変動はある。正常なプロセス。高強度は引き続き避ける。'
+        },
+        HIGH: {
+          assessment: '不安定な回復の初期段階',
+          detail: '回復に向かい始めたが、まだ非常に不安定。少しの追加ストレスで再び悪化するリスクがある。完全な回復を最優先すべき。'
+        }
+      },
+      '停滞した疲労': {
+        LOW: {
+          assessment: '慢性疲労/デッドロック',
+          detail: '回復が完全に停滞し、低い状態で安定してしまっている。トレーニング刺激の根本的な見直しや長期的な休養が必要な可能性。'
+        },
+        MODERATE: {
+          assessment: '標準的な停滞',
+          detail: '低い準備状態が続いている。回復を妨げている要因を特定し、排除することに集中する必要がある。'
+        },
+        HIGH: {
+          assessment: '回復の阻害',
+          detail: '回復しようとする力と、それを妨げる要因（継続的なストレス、病気の初期段階など）がせめぎ合っている状態。トレーニング外の要因を徹底的に調査する必要がある。'
+        }
+      },
+      '急性不適応/高リスク': {
+        LOW: {
+          assessment: '一貫した悪化',
+          detail: '（この状態での低ボラティリティは稀だが）身体が一貫して悪化の一途をたどっている非常に危険な状態。オーバートレーニング症候群など、深刻な状態の可能性。'
+        },
+        MODERATE: {
+          assessment: '悪化進行中',
+          detail: '準備状態は低く、さらに悪化しており、変動も平常範囲内。明確なネガティブトレンド。トレーニングの大幅な削減が必要。'
+        },
+        HIGH: {
+          assessment: '制御不能な悪化',
+          detail: 'スコアは低く、下降しており、さらに日々の変動も大きい。身体が完全に恒常性を失っている状態。トレーニングの中止と専門家への相談が必須。'
+        }
+      }
+    };
+
+    // 基本情報の構築
     let baseInfo = `UCRスコア${ucrScore}点`;
     
     if (momentum !== null && momentum !== undefined) {
@@ -762,7 +964,15 @@ export class UCRCalculator {
       baseInfo += '（モメンタム計算不可）。';
     }
     
-    // ボラティリティ情報
+    // ボラティリティレベルに応じた解釈を取得
+    const stateInterpretations = volatilityInterpretations[trendState];
+    if (!stateInterpretations) {
+      return `${baseInfo}『${trendState}』`;
+    }
+    
+    const levelInterpretation = stateInterpretations[volatilityLevel] || stateInterpretations['MODERATE'];
+    
+    // ボラティリティ情報の追加
     let volatilityInfo = '';
     if (volatilityLevel === 'HIGH') {
       volatilityInfo = `ボラティリティが統計的に有意に高い状態（${volatility}）。`;
@@ -770,20 +980,8 @@ export class UCRCalculator {
       volatilityInfo = `ボラティリティが統計的に有意に低く安定（${volatility}）。`;
     }
     
-    // 簡略化された解釈（完全版は必要に応じて拡張）
-    let assessment = '';
-    if (trendState.includes('スーパーコンペンセーション')) {
-      assessment = volatilityLevel === 'LOW' ? '理想的なピーキング状態。' : 
-                   volatilityLevel === 'HIGH' ? '不安定なピーク状態。' : '良好なピーキング状態。';
-    } else if (trendState.includes('疲労')) {
-      assessment = '疲労蓄積の兆候。負荷調整を検討してください。';
-    } else if (trendState.includes('回復')) {
-      assessment = '回復プロセスが進行中。継続的な回復が重要です。';
-    } else {
-      assessment = 'バランスの取れた状態です。';
-    }
-    
-    return `${baseInfo}『${trendState}』の状態で、${assessment}${volatilityInfo}`;
+    // 最終的な解釈テキストの構築
+    return `${baseInfo}『${trendState}』の状態で、${levelInterpretation.assessment}。${volatilityInfo}${levelInterpretation.detail}`;
   }
 
   // ユーティリティ関数
@@ -796,5 +994,36 @@ export class UCRCalculator {
     const mean = this.calculateMean(values);
     const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1);
     return Math.sqrt(variance);
+  }
+  
+  private detectParasympatheticSaturation(currentHRV: number, currentRHR: number, baselines: BaselineData): boolean {
+    const lnCurrentHRV = Math.log(currentHRV);
+    return lnCurrentHRV < (baselines.hrv.mean60 - this.config.hrv.sensitivityFactor * baselines.hrv.sd60) &&
+           currentRHR < baselines.rhr.mean30;
+  }
+  
+  private evaluateDataQuality(baselines: BaselineData, historical: WellnessData[]): { confidence: string; quality?: any } {
+    const hrvDays = baselines.hrv.dataCount;
+    const rhrDays = baselines.rhr.dataCount;
+    
+    let confidence = 'high';
+    let message = '';
+    
+    if (hrvDays < 30 || rhrDays < 30) {
+      confidence = 'low';
+      message = `Limited historical data (${Math.min(hrvDays, rhrDays)} days). Accuracy will improve with more data.`;
+    } else if (hrvDays < 60) {
+      confidence = 'medium';
+      message = `Moderate historical data (${hrvDays} days).`;
+    }
+    
+    return {
+      confidence,
+      quality: message ? {
+        hrvDays,
+        rhrDays,
+        message
+      } : undefined
+    };
   }
 }

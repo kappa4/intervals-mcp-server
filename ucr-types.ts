@@ -46,21 +46,39 @@ export interface UCRComponents {
   subjective: number; // 0-20
 }
 
+export interface ModifierDetail {
+  applied: boolean;
+  value: number;
+  reason: string;
+}
+
 export interface UCRModifiers {
-  alcohol: number;
-  muscleSoreness: number;
-  injury: number;
-  motivation: number;
-  sleepDebt: number;
+  alcohol?: ModifierDetail;
+  muscleSoreness?: ModifierDetail;
+  injury?: ModifierDetail;
+  motivation?: ModifierDetail;
+  sleepDebt?: ModifierDetail;
 }
 
 export interface UCRResult {
   score: number;           // 0-100
   baseScore: number;       // 修正前スコア
   components: UCRComponents;
-  modifiers: UCRModifiers;
+  modifiers?: UCRModifiers;
+  multiplier?: number;     // 累積修正係数
   recommendation: TrainingRecommendation;
   baselines?: BaselineData;
+  confidence?: string;     // high, medium, low
+  trainingRecommendation?: string; // テスト互換性のため
+  dataQuality?: {
+    hrvDays: number;
+    rhrDays: number;
+    message: string;
+  };
+  debugInfo?: {
+    parasympatheticSaturation?: boolean;
+    [key: string]: any;
+  };
 }
 
 // ========================================
