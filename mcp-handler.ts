@@ -512,7 +512,9 @@ export class MCPHandler {
     let result = `**Athlete Profile**\n\n`;
     result += `- Name: ${athlete.name}\n`;
     result += `- ID: ${athlete.id}\n`;
-    result += `- Email: ${athlete.user.email}\n`;
+    if (athlete.email) {
+      result += `- Email: ${athlete.email}\n`;
+    }
     
     if (athlete.activity_count) {
       result += `- Total Activities: ${athlete.activity_count}\n`;

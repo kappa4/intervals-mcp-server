@@ -71,11 +71,7 @@ export interface IntervalsEventData {
 export interface IntervalsAthlete {
   id: string;
   name: string;
-  user: {
-    id: number;
-    email: string;
-    name: string;
-  };
+  email?: string;
   created: string;
   updated: string;
   oldest_activity_at?: string;

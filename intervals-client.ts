@@ -58,6 +58,15 @@ export class IntervalsAPIClient {
 
       const data = await response.json();
       log("DEBUG", `Request successful, received ${JSON.stringify(data).length} characters`);
+      
+      // Log response structure for debugging
+      if (endpoint.includes('/wellness')) {
+        log("DEBUG", `Wellness response type: ${Array.isArray(data) ? 'array' : typeof data}`);
+        if (Array.isArray(data)) {
+          log("DEBUG", `Wellness array length: ${data.length}`);
+        }
+      }
+      
       return data as T;
     } catch (error) {
       log("ERROR", `Request failed: ${error.message}`);
@@ -76,7 +85,10 @@ export class IntervalsAPIClient {
     if (filters.cursor) searchParams.set("cursor", filters.cursor);
 
     const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
-    return this.makeRequest<IntervalsListResponse<IntervalsActivity>>(`/activities${query}`);
+    const data = await this.makeRequest<IntervalsActivity[]>(`/activities${query}`);
+    
+    // Intervals.icu returns array directly, wrap it in our expected format
+    return { data };
   }
 
   async getActivity(activityId: number): Promise<IntervalsActivity> {
@@ -106,7 +118,10 @@ export class IntervalsAPIClient {
     if (filters.cursor) searchParams.set("cursor", filters.cursor);
 
     const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
-    return this.makeRequest<IntervalsListResponse<IntervalsWellness>>(`/wellness${query}`);
+    const data = await this.makeRequest<IntervalsWellness[]>(`/wellness${query}`);
+    
+    // Intervals.icu returns array directly, wrap it in our expected format
+    return { data };
   }
 
   async getWellnessEntry(date: string): Promise<IntervalsWellness> {
@@ -137,7 +152,10 @@ export class IntervalsAPIClient {
     if (filters.cursor) searchParams.set("cursor", filters.cursor);
 
     const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
-    return this.makeRequest<IntervalsListResponse<IntervalsEventData>>(`/events${query}`);
+    const data = await this.makeRequest<IntervalsEventData[]>(`/events${query}`);
+    
+    // Intervals.icu returns array directly, wrap it in our expected format
+    return { data };
   }
 
   async createEvent(data: Partial<IntervalsEventData>): Promise<IntervalsEventData> {
@@ -167,7 +185,10 @@ export class IntervalsAPIClient {
 
   // Workouts
   async getWorkouts(): Promise<IntervalsListResponse<IntervalsWorkout>> {
-    return this.makeRequest<IntervalsListResponse<IntervalsWorkout>>("/workouts");
+    const data = await this.makeRequest<IntervalsWorkout[]>("/workouts");
+    
+    // Intervals.icu returns array directly, wrap it in our expected format
+    return { data };
   }
 
   async getWorkout(workoutId: string): Promise<IntervalsWorkout> {
