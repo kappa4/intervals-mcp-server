@@ -160,6 +160,28 @@ const data = await this.makeRequest<IntervalsActivity[]>(`/activities/${activity
 return data[0];
 ```
 
+### 6. get_activity "Activity not found" Error (2025-08-03)
+**Problem**: Activity ID type mismatch - using `number` instead of `string`
+**Root Cause**: OpenAPI spec defines Activity.id as `string`, but code used `number`
+**Solution**: Change activity ID type from number to string
+
+```typescript
+// Before: 
+interface IntervalsActivity { id: number; }
+activity_id: { type: "number" }
+
+// After:
+interface IntervalsActivity { id: string; }  
+activity_id: { type: "string" }
+```
+
+**✅ Confirmed Working**: Successfully tested with activity ID "i89274717"
+
+**Additional Benefits**: 
+- get_activity provides more detailed fields than get_activities
+- Additional fields: `description`, `icu_intensity`
+- All custom fields are also included
+
 ## References
 
 - OpenAPI Spec: `docs/intervals-openapi-spec.json`
