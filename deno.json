@@ -37,7 +37,8 @@
     "coverage": "deno coverage coverage --lcov > coverage.lcov"
   },
   "imports": {
-    "std/": "https://deno.land/std@0.208.0/"
+    "std/": "https://deno.land/std@0.208.0/",
+    "@modelcontextprotocol/sdk/types.js": "https://esm.sh/@modelcontextprotocol/sdk@1.0.0/types.js"
   },
   "deploy": {
     "project": "3facc4af-0dd6-47cc-a0b9-eb8c3eae2846",
