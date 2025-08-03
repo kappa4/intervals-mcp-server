@@ -37,7 +37,7 @@ const DEFAULT_WELLNESS_VALUES: DefaultWellnessValues = {
 };
 
 export class UCRIntervalsClient extends IntervalsAPIClient {
-  private ucrCalculator: UCRCalculator;
+  protected ucrCalculator: UCRCalculator;
 
   constructor(options: IntervalsAPIOptions) {
     super(options);
@@ -89,6 +89,7 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
 
   /**
    * UCR計算に必要な期間のウェルネスデータを取得
+   * @protected - Override this method in CachedUCRIntervalsClient for caching
    */
   async getWellnessDataForUCR(targetDate: string, lookbackDays: number = 60): Promise<WellnessData[]> {
     // 過去60日分のデータを取得

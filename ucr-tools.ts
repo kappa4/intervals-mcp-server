@@ -4,7 +4,7 @@
  */
 
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
+import { CachedUCRIntervalsClient } from "./ucr-intervals-client-cached.ts";
 import { log } from "./logger.ts";
 import type { IntervalsAPIOptions } from "./intervals-types.ts";
 
@@ -134,10 +134,10 @@ export const UCR_TOOLS: Tool[] = [
 
 // UCRツール実行ハンドラー
 export class UCRToolHandler {
-  private client: UCRIntervalsClient;
+  private client: CachedUCRIntervalsClient;
 
   constructor(apiOptions: IntervalsAPIOptions) {
-    this.client = new UCRIntervalsClient(apiOptions);
+    this.client = new CachedUCRIntervalsClient(apiOptions);
   }
 
   async handleTool(toolName: string, args: any): Promise<any> {

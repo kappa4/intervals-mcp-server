@@ -1,0 +1,230 @@
+/**
+ * キャッシュ機能を統合したUCRIntervalsClient
+ * WellnessCacheを利用してAPI呼び出しを最適化
+ */
+
+import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
+import { WellnessCache } from "./cache/wellness-cache.ts";
+import { 
+  getWellnessCacheKey, 
+  formatDateRange,
+  parseDateRange,
+} from "./cache/cache-utils.ts";
+import { log } from "./logger.ts";
+import type {
+  IntervalsAPIOptions,
+  IntervalsWellness,
+  IntervalsListResponse,
+} from "./intervals-types.ts";
+import type {
+  WellnessData,
+  UCRWithTrend,
+} from "./ucr-types.ts";
+
+export class CachedUCRIntervalsClient extends UCRIntervalsClient {
+  private cache: WellnessCache;
+  private cacheEnabled: boolean;
+  protected ucrCalculator: any; // Access parent's protected property
+
+  constructor(options: IntervalsAPIOptions) {
+    super(options);
+    this.cache = new WellnessCache();
+    this.cacheEnabled = Deno.env.get("CACHE_ENABLED") !== "false";
+    
+    log("DEBUG", `CachedUCRIntervalsClient initialized, cache ${this.cacheEnabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Override getWellnessDataForUCR with cache support
+   */
+  async getWellnessDataForUCR(targetDate: string, lookbackDays: number = 60): Promise<WellnessData[]> {
+    // Generate cache key for the date range
+    const startDate = new Date(targetDate);
+    startDate.setDate(startDate.getDate() - lookbackDays);
+    
+    const oldest = startDate.toISOString().split('T')[0];
+    const newest = targetDate;
+    const cacheKey = getWellnessCacheKey(
+      this.athlete_id, 
+      formatDateRange(oldest, newest)
+    );
+
+    // Try cache first if enabled
+    if (this.cacheEnabled) {
+      log("DEBUG", `Checking cache for wellness data: ${oldest} to ${newest}`);
+      
+      const cacheResult = await this.cache.get<WellnessData[]>(cacheKey);
+      if (cacheResult.success && cacheResult.cached && cacheResult.data) {
+        log("INFO", `Cache hit for wellness data: ${oldest} to ${newest}`);
+        return cacheResult.data;
+      }
+      
+      log("DEBUG", "Cache miss, fetching from API");
+    }
+
+    try {
+      // Fetch from parent implementation (API)
+      const data = await super.getWellnessDataForUCR(targetDate, lookbackDays);
+      
+      // Cache the result if enabled
+      if (this.cacheEnabled && data.length > 0) {
+        // Cache for 1 hour for recent data, 24 hours for older data
+        const isRecent = new Date(newest).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const ttlMs = isRecent ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+        
+        await this.cache.set(cacheKey, data, ttlMs);
+        log("DEBUG", `Cached wellness data with TTL ${ttlMs}ms`);
+      }
+      
+      return data;
+    } catch (error) {
+      log("ERROR", `Failed to fetch wellness data: ${error.message}`);
+      
+      // Try cache as fallback even if expired
+      if (this.cacheEnabled) {
+        log("WARN", "Attempting to use expired cache due to API error");
+        const fallbackResult = await this.cache.get<WellnessData[]>(cacheKey);
+        if (fallbackResult.data) {
+          log("WARN", "Using expired cache data as fallback");
+          return fallbackResult.data;
+        }
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Override batchCalculateUCR with optimized caching
+   */
+  async batchCalculateUCR(
+    startDate: string,
+    endDate: string,
+    updateIntervals: boolean = false
+  ): Promise<Map<string, UCRWithTrend>> {
+    log("DEBUG", `Batch calculating UCR with cache optimization from ${startDate} to ${endDate}`);
+
+    // For batch operations, we'll cache the entire dataset
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const lookbackStart = new Date(start);
+    lookbackStart.setDate(lookbackStart.getDate() - 60);
+
+    const batchCacheKey = getWellnessCacheKey(
+      this.athlete_id,
+      formatDateRange(lookbackStart.toISOString().split('T')[0], endDate)
+    );
+
+    let wellnessData: WellnessData[] | null = null;
+
+    // Try to get cached batch data
+    if (this.cacheEnabled) {
+      const cacheResult = await this.cache.get<WellnessData[]>(batchCacheKey);
+      if (cacheResult.success && cacheResult.cached && cacheResult.data) {
+        log("INFO", "Using cached data for batch UCR calculation");
+        wellnessData = cacheResult.data;
+      }
+    }
+
+    // If not cached, fetch and cache
+    if (!wellnessData) {
+      wellnessData = await this.getWellnessDataForUCR(end.toISOString().split('T')[0], 90);
+      
+      if (this.cacheEnabled && wellnessData.length > 0) {
+        // Cache batch data for 24 hours
+        await this.cache.set(batchCacheKey, wellnessData, 24 * 60 * 60 * 1000);
+        log("DEBUG", "Cached batch wellness data");
+      }
+    }
+
+    // Use parent's batch calculation logic with cached data
+    const results = new Map<string, UCRWithTrend>();
+    
+    for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      
+      try {
+        const currentData = wellnessData.find(d => d.date === dateStr);
+        if (!currentData) {
+          log("WARN", `No wellness data found for ${dateStr}, skipping`);
+          continue;
+        }
+
+        const historicalData = wellnessData.filter(d => d.date <= dateStr);
+        
+        const input = {
+          current: currentData,
+          historical: historicalData
+        };
+
+        const result = this.ucrCalculator.calculateWithTrends(input);
+        results.set(dateStr, result);
+
+        if (updateIntervals) {
+          await this.updateWellnessWithUCR(dateStr, result);
+          // Invalidate cache for this specific date since we updated it
+          if (this.cacheEnabled) {
+            const dateCacheKey = getWellnessCacheKey(this.athlete_id, dateStr);
+            await this.cache.delete(dateCacheKey);
+          }
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        log("DEBUG", `UCR calculated for ${dateStr}: score=${result.score}`);
+      } catch (error) {
+        log("ERROR", `Failed to calculate UCR for ${dateStr}: ${error.message}`);
+      }
+    }
+
+    log("INFO", `Batch UCR calculation completed: ${results.size} entries processed`);
+    return results;
+  }
+
+  /**
+   * Override updateWellnessAndRecalculateUCR to invalidate cache
+   */
+  async updateWellnessAndRecalculateUCR(
+    date: string,
+    updates: {
+      fatigue?: number;
+      stress?: number;
+      motivation?: number;
+      soreness?: number;
+      injury?: number;
+    }
+  ): Promise<UCRWithTrend> {
+    // Invalidate cache for this date before update
+    if (this.cacheEnabled) {
+      const dateCacheKey = getWellnessCacheKey(this.athlete_id, date);
+      await this.cache.delete(dateCacheKey);
+      
+      // Also invalidate any date ranges that include this date
+      // This is a simple implementation - Phase 4 will have pattern-based invalidation
+      log("DEBUG", `Invalidated cache for ${date} due to wellness update`);
+    }
+
+    // Call parent implementation
+    return super.updateWellnessAndRecalculateUCR(date, updates);
+  }
+
+  /**
+   * Get cache metrics for monitoring
+   */
+  getCacheMetrics() {
+    return this.cache.getMetrics();
+  }
+
+  /**
+   * Clear cache metrics
+   */
+  clearCacheMetrics() {
+    this.cache.clearMetrics();
+  }
+
+  /**
+   * Close cache connection
+   */
+  async close() {
+    await this.cache.close();
+  }
+}

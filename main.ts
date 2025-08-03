@@ -10,6 +10,8 @@ import { IntervalsAPIClient } from "./intervals-client.ts";
 import { log, info, warn, error } from "./logger.ts";
 import { OAuthServer } from "./oauth/auth-server.ts";
 import { MCPHandler } from "./mcp-handler.ts";
+import { WellnessCache } from "./cache/wellness-cache.ts";
+import { getWellnessCacheKey } from "./cache/cache-utils.ts";
 
 // Environment validation
 function validateEnvironment(): void {
@@ -104,7 +106,9 @@ async function handler(req: Request): Promise<Response> {
         service: "intervals-mcp-server", 
         version: "1.0.0",
         athlete_id: Deno.env.get("ATHLETE_ID"),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        kv_enabled: true,
+        cache_enabled: Deno.env.get("CACHE_ENABLED") !== "false"
       }),
       { 
         headers: { 
@@ -157,6 +161,67 @@ async function handler(req: Request): Promise<Response> {
           status: "error", 
           service: "intervals-mcp-server",
           error: "Failed to connect to Intervals.icu API"
+        }),
+        { 
+          status: 500,
+          headers: { 
+            ...CORS_HEADERS, 
+            "Content-Type": "application/json" 
+          } 
+        }
+      );
+    }
+  }
+  
+  // TTL test endpoint (no auth required, for testing only)
+  if (path === "/test/ttl") {
+    try {
+      const cache = new WellnessCache();
+      const key = getWellnessCacheKey("test123", "2025-01-01");
+      const testData = { 
+        test: "TTL test data", 
+        timestamp: new Date().toISOString() 
+      };
+      
+      // Set with 5 second TTL
+      const ttlMs = 5000;
+      await cache.set(key, testData, ttlMs);
+      
+      // Get immediately
+      const result1 = await cache.get(key);
+      
+      // Schedule check after TTL
+      setTimeout(async () => {
+        const result2 = await cache.get(key);
+        info(`TTL test - after ${ttlMs}ms: cached=${result2.cached}`);
+      }, ttlMs + 1000);
+      
+      await cache.close();
+      
+      return new Response(
+        JSON.stringify({ 
+          status: "success",
+          message: "TTL test initiated",
+          initial_get: {
+            cached: result1.cached,
+            hit: result1.metrics?.cacheHit
+          },
+          ttl_ms: ttlMs,
+          check_after_ms: ttlMs + 1000
+        }),
+        { 
+          headers: { 
+            ...CORS_HEADERS, 
+            "Content-Type": "application/json" 
+          } 
+        }
+      );
+    } catch (err) {
+      error("TTL test error:", err);
+      return new Response(
+        JSON.stringify({ 
+          status: "error", 
+          error: err instanceof Error ? err.message : String(err)
         }),
         { 
           status: 500,
