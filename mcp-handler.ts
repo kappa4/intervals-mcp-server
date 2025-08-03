@@ -187,7 +187,7 @@ export class MCPHandler {
       tools: [
         {
           name: "get_activities",
-          description: "Get recent activities from Intervals.icu",
+          description: "Get recent activities from Intervals.icu. If no date range is specified, returns activities from the last 30 days.",
           inputSchema: {
             type: "object",
             properties: {
@@ -202,11 +202,11 @@ export class MCPHandler {
               },
               oldest: {
                 type: "string",
-                description: "Oldest date to include (YYYY-MM-DD format)"
+                description: "Oldest date to include (YYYY-MM-DD format). Defaults to 30 days ago if not specified."
               },
               newest: {
                 type: "string", 
-                description: "Newest date to include (YYYY-MM-DD format)"
+                description: "Newest date to include (YYYY-MM-DD format). Defaults to today if not specified."
               }
             }
           }
@@ -384,11 +384,16 @@ export class MCPHandler {
   private async getActivities(args: any): Promise<string> {
     const { limit = 10, type, oldest, newest } = args;
     
+    // If no date range is specified, default to last 30 days
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
     const activities = await this.intervalsClient.getActivities({
       limit: Math.min(limit, 50),
       type,
-      oldest,
-      newest
+      oldest: oldest || thirtyDaysAgo.toISOString().split('T')[0],
+      newest: newest || now.toISOString().split('T')[0]
     });
 
     if (activities.data.length === 0) {
@@ -570,7 +575,16 @@ export class MCPHandler {
         data = await this.intervalsClient.getAthlete();
         break;
       case "intervals://activities/recent":
-        data = await this.intervalsClient.getActivities({ limit: 10 });
+        // Default to last 30 days for recent activities
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        data = await this.intervalsClient.getActivities({ 
+          limit: 10,
+          oldest: thirtyDaysAgo.toISOString().split('T')[0],
+          newest: now.toISOString().split('T')[0]
+        });
         break;
       case "intervals://wellness/recent":
         data = await this.intervalsClient.getWellnessData({ limit: 7 });
