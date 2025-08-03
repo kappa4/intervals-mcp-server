@@ -4,7 +4,6 @@
  * Run this once to register the clients that Claude Web expects
  */
 
-// Add parent directory to import path
 import { ClientStorage } from "../oauth/storage/clients.ts";
 import type { OAuthClient } from "../oauth/types.ts";
 

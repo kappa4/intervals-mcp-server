@@ -1,13 +1,50 @@
 {
-  "version": "1.0.0",
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": [
+      "deno.window"
+    ],
+    "strict": true
+  },
+  "lint": {
+    "rules": {
+      "tags": [
+        "recommended"
+      ]
+    }
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve",
+    "include": [
+      "src/"
+    ],
+    "exclude": [
+      "node_modules/"
+    ]
+  },
   "tasks": {
-    "start": "python main.py",
-    "dev": "python main.py --dev",
-    "test": "python -m pytest tests/",
-    "lint": "python -m ruff check .",
-    "format": "python -m ruff format ."
+    "dev": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv --watch main.ts",
+    "start": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv main.ts"
   },
   "imports": {
-    "main": "./main.py"
+    "std/": "https://deno.land/std@0.208.0/"
+  },
+  "deploy": {
+    "project": "3facc4af-0dd6-47cc-a0b9-eb8c3eae2846",
+    "exclude": [
+      "**/node_modules",
+      "**/node_modules",
+      "**/node_modules",
+      "**/node_modules",
+      "**/node_modules",
+      "**/node_modules"
+    ],
+    "include": [],
+    "entrypoint": "main.ts"
   }
 }
