@@ -5,6 +5,8 @@
 
 import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
 import { WellnessCache } from "./cache/wellness-cache.ts";
+import { CacheWarmer } from "./cache/cache-warming.ts";
+import { BackgroundCacheUpdater } from "./cache/background-updater.ts";
 import { 
   getWellnessCacheKey, 
   formatDateRange,
@@ -24,13 +26,33 @@ import type {
 
 export class CachedUCRIntervalsClient extends UCRIntervalsClient {
   private cache: WellnessCache;
-  private cacheEnabled: boolean;
+  private cacheWarmer?: CacheWarmer;
+  private backgroundUpdater?: BackgroundCacheUpdater;
+  cacheEnabled: boolean; // Make public for background updater
   declare protected ucrCalculator: any; // Access parent's protected property
 
   constructor(options: IntervalsAPIOptions) {
     super(options);
     this.cache = new WellnessCache();
     this.cacheEnabled = Deno.env.get("CACHE_ENABLED") !== "false";
+    
+    // Initialize cache optimization features if enabled
+    if (this.cacheEnabled) {
+      this.cacheWarmer = new CacheWarmer(this.cache, this);
+      this.backgroundUpdater = new BackgroundCacheUpdater(this.cache, this);
+      
+      // Start cache warming and background updates
+      if (Deno.env.get("CACHE_WARMING") !== "false") {
+        this.cacheWarmer.schedulePeriodicWarming();
+      }
+      
+      if (Deno.env.get("CACHE_BACKGROUND_UPDATE") !== "false") {
+        this.backgroundUpdater.start();
+      }
+      
+      // Start statistics logging
+      this.cache.startStatsLogging();
+    }
     
     log("DEBUG", `CachedUCRIntervalsClient initialized, cache ${this.cacheEnabled ? 'enabled' : 'disabled'}`);
   }
@@ -220,6 +242,41 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
    */
   clearCacheMetrics() {
     this.cache.clearMetrics();
+  }
+
+  /**
+   * Get calculator for cache warmer
+   */
+  getCalculator() {
+    return this.ucrCalculator;
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStatistics() {
+    return this.cache.getStatistics();
+  }
+
+  /**
+   * Get cache warmer status
+   */
+  getCacheWarmerStatus() {
+    return {
+      enabled: !!this.cacheWarmer,
+      isWarming: false // Would need to expose from CacheWarmer
+    };
+  }
+
+  /**
+   * Get background updater status
+   */
+  getBackgroundUpdaterStatus() {
+    return this.backgroundUpdater?.getStatus() || {
+      isRunning: false,
+      queueLength: 0,
+      inProgress: 0
+    };
   }
 
   /**

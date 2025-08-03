@@ -206,7 +206,7 @@ export class MCPHandler {
           name: "get_activities",
           description: "Get recent activities from Intervals.icu. If no date range is specified, returns activities from the last 30 days.",
           inputSchema: {
-            type: "object",
+            type: "object" as const,
             properties: {
               limit: {
                 type: "number",
@@ -232,7 +232,7 @@ export class MCPHandler {
           name: "get_activity",
           description: "Get detailed information about a specific activity",
           inputSchema: {
-            type: "object",
+            type: "object" as const,
             properties: {
               activity_id: {
                 type: "string",
@@ -246,7 +246,7 @@ export class MCPHandler {
           name: "get_wellness",
           description: "Get wellness data from Intervals.icu",
           inputSchema: {
-            type: "object",
+            type: "object" as const,
             properties: {
               limit: {
                 type: "number",
@@ -268,7 +268,7 @@ export class MCPHandler {
           name: "update_wellness",
           description: "Update wellness data for a specific date",
           inputSchema: {
-            type: "object",
+            type: "object" as const,
             properties: {
               date: {
                 type: "string",
@@ -314,20 +314,14 @@ export class MCPHandler {
           name: "get_athlete_info",
           description: "Get athlete profile information",
           inputSchema: {
-            type: "object",
+            type: "object" as const,
             properties: {}
           }
         }
       ];
 
-    // UCRツールを追加 (MCPTool型に変換)
-    const ucrToolsAsMCPTools: MCPTool[] = UCR_TOOLS.map(tool => ({
-      name: tool.name,
-      description: tool.description || "No description available",
-      inputSchema: tool.inputSchema as MCPTool["inputSchema"]
-    }));
-    
-    const allTools = [...intervalTools, ...ucrToolsAsMCPTools];
+    // UCRツールを追加
+    const allTools = [...intervalTools, ...UCR_TOOLS];
     const response = { tools: allTools };
     
     debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);

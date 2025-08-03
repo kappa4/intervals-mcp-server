@@ -3,14 +3,14 @@
  * Claude経由でのUCR評価アクセス用MCPツール実装
  */
 
-import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { CachedUCRIntervalsClient } from "./ucr-intervals-client-cached.ts";
 import { log } from "./logger.ts";
 import { getErrorMessage } from "./utils/error-utils.ts";
 import type { IntervalsAPIOptions } from "./intervals-types.ts";
+import type { MCPTool } from "./mcp-types.ts";
 
 // UCR MCPツール定義
-export const UCR_TOOLS: Tool[] = [
+export const UCR_TOOLS: MCPTool[] = [
   {
     name: "get_ucr_assessment",
     description: "指定日のUCR（Unified Continuous Readiness）評価を計算・取得。トレーニング準備状態の評価とトレーニング推奨を提供します。",

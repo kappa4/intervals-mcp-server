@@ -23,11 +23,13 @@ import {
 } from "./cache-config.ts";
 import { isExpired } from "./cache-utils.ts";
 import { log } from "../logger.ts";
+import { CacheStatsCollector } from "./cache-stats.ts";
 
 export class WellnessCache implements ICacheManager {
   private kv: Deno.Kv | null = null;
   private versionManager: CacheVersionManager;
   private config = getCacheConfig();
+  private statsCollector: CacheStatsCollector;
   
   // Metrics tracking
   private metrics = {
@@ -39,6 +41,7 @@ export class WellnessCache implements ICacheManager {
 
   constructor() {
     this.versionManager = new CacheVersionManager();
+    this.statsCollector = new CacheStatsCollector();
     if (this.config.debug) {
       log("DEBUG", "WellnessCache initialized with config:", this.config);
     }
@@ -121,6 +124,8 @@ export class WellnessCache implements ICacheManager {
         
         // Entry is still valid
         this.metrics.totalHits++;
+        const dataSize = JSON.stringify(result.value.value).length;
+        this.statsCollector.recordHit(keyComponents.dataType, dataSize, operationTime);
         
         return {
           success: true,
@@ -134,6 +139,7 @@ export class WellnessCache implements ICacheManager {
       }
 
       this.metrics.totalMisses++;
+      this.statsCollector.recordMiss(keyComponents.dataType, operationTime);
       return {
         success: true,
         cached: false,
@@ -401,6 +407,54 @@ export class WellnessCache implements ICacheManager {
     if (this.metrics.operationTimes.length > 1000) {
       this.metrics.operationTimes = this.metrics.operationTimes.slice(-1000);
     }
+  }
+
+  /**
+   * Get cached entry with full metadata
+   */
+  async getWithMetadata<T = unknown>(
+    key: CacheKeyComponents
+  ): Promise<CacheEntry<T> | null> {
+    try {
+      const kv = await this.ensureKvConnection();
+      const kvKey = buildCacheKey(key);
+      const result = await kv.get<CacheEntry<T>>(kvKey);
+      
+      if (result.value) {
+        // Check if expired
+        const ttlMs = result.value.ttl || getTTLMilliseconds(key.dataType, this.config);
+        if (isExpired(result.value.cachedAt, ttlMs)) {
+          return null;
+        }
+        return result.value;
+      }
+      
+      return null;
+    } catch (error) {
+      log("ERROR", `Get with metadata error: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get TTL for a given data type
+   */
+  getTTL(dataType: string): number {
+    return getTTLMilliseconds(dataType as CacheKeyComponents["dataType"], this.config);
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getStatistics() {
+    return this.statsCollector.getStats();
+  }
+
+  /**
+   * Start periodic statistics logging
+   */
+  startStatsLogging(intervalMs?: number): void {
+    this.statsCollector.startPeriodicLogging(intervalMs);
   }
 
   /**
