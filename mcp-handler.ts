@@ -354,10 +354,23 @@ export class MCPHandler {
 
   private getCustomFields(obj: any, knownFields: string[]): Record<string, any> {
     const customFields: Record<string, any> = {};
+    
+    // Convert knownFields to a Set for O(1) lookup
+    const knownFieldsSet = new Set(knownFields);
+    
     for (const [key, value] of Object.entries(obj)) {
-      if (!knownFields.includes(key) && value !== null && value !== undefined) {
-        customFields[key] = value;
+      // Skip if it's a known field, null, or undefined
+      if (knownFieldsSet.has(key) || value === null || value === undefined) {
+        continue;
       }
+      
+      // Skip internal/system fields that start with underscore or are common metadata
+      if (key.startsWith('_') || key === 'cursor' || key === 'data') {
+        continue;
+      }
+      
+      // This is likely a custom field
+      customFields[key] = value;
     }
     return customFields;
   }
@@ -505,10 +518,29 @@ export class MCPHandler {
       if (entry.resting_hr) result += `- Resting HR: ${entry.resting_hr}bpm\n`;
       if (entry.notes) result += `- Notes: ${entry.notes}\n`;
       
+      // Check for user_data field which might contain custom fields
+      if (entry.user_data && typeof entry.user_data === 'object') {
+        const userDataEntries = Object.entries(entry.user_data);
+        if (userDataEntries.length > 0) {
+          result += "**User Data (Custom Fields):**\n";
+          for (const [key, value] of userDataEntries) {
+            result += `- ${key}: ${value}\n`;
+          }
+        }
+      }
+      
       // Add custom fields if any
       const knownFields = [
-        'id', 'created', 'updated', 'date', 'sleep_quality', 'sleep_hours',
-        'soreness', 'fatigue', 'stress', 'motivation', 'weight', 'body_fat',
+        // From OpenAPI spec
+        'abdomen', 'atl', 'atlLoad', 'avgSleepingHR', 'baevskySI', 'bloodGlucose',
+        'bodyFat', 'comments', 'ctl', 'ctlLoad', 'diastolic', 'fatigue', 'hrv',
+        'hrvSDNN', 'hydration', 'hydrationVolume', 'id', 'injury', 'kcalConsumed',
+        'lactate', 'locked', 'menstrualPhase', 'menstrualPhasePredicted', 'mood',
+        'motivation', 'rampRate', 'readiness', 'respiration', 'restingHR',
+        'sleepQuality', 'sleepScore', 'sleepSecs', 'soreness', 'spO2', 'sportInfo',
+        'steps', 'stress', 'systolic', 'updated', 'vo2max', 'weight',
+        // Additional fields from TypeScript interface (snake_case variants)
+        'created', 'date', 'sleep_quality', 'sleep_hours', 'body_fat',
         'hr_variability', 'hrv_rmssd', 'resting_hr', 'menstrual_phase',
         'sick', 'injured', 'notes', 'user_data'
       ];

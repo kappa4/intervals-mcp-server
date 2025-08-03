@@ -15,6 +15,7 @@ import type {
   ActivityFilters,
   WellnessFilters,
   EventFilters,
+  IntervalsCustomItem,
 } from "./intervals-types.ts";
 
 export class IntervalsAPIClient {
@@ -64,6 +65,20 @@ export class IntervalsAPIClient {
         log("DEBUG", `Wellness response type: ${Array.isArray(data) ? 'array' : typeof data}`);
         if (Array.isArray(data)) {
           log("DEBUG", `Wellness array length: ${data.length}`);
+          // Log first entry structure to understand custom fields
+          if (data.length > 0) {
+            log("DEBUG", `First wellness entry keys: ${Object.keys(data[0]).join(', ')}`);
+            // Check for user_data field
+            if (data[0].user_data) {
+              log("DEBUG", `user_data field found: ${JSON.stringify(data[0].user_data)}`);
+            }
+            // Log any fields that might be custom (not in standard list)
+            const standardFields = ['id', 'date', 'weight', 'restingHR', 'hrv', 'sleepSecs', 'sleepQuality', 'fatigue', 'soreness', 'motivation', 'stress', 'mood', 'injury', 'notes', 'ctl', 'atl', 'rampRate', 'ctlLoad', 'atlLoad', 'sportInfo', 'updated'];
+            const possibleCustomFields = Object.keys(data[0]).filter(key => !standardFields.includes(key));
+            if (possibleCustomFields.length > 0) {
+              log("DEBUG", `Possible custom fields: ${possibleCustomFields.join(', ')}`);
+            }
+          }
         }
       }
       
@@ -200,5 +215,22 @@ export class IntervalsAPIClient {
 
   async getWorkout(workoutId: string): Promise<IntervalsWorkout> {
     return this.makeRequest<IntervalsWorkout>(`/workouts/${workoutId}`);
+  }
+
+  // Custom Items
+  async getCustomItems(): Promise<IntervalsCustomItem[]> {
+    return this.makeRequest<IntervalsCustomItem[]>("/custom-item");
+  }
+
+  async getCustomWellnessFields(): Promise<IntervalsCustomItem[]> {
+    const items = await this.getCustomItems();
+    // Filter for INPUT_FIELD type which are wellness custom fields
+    return items.filter(item => item.type === 'INPUT_FIELD');
+  }
+
+  async getCustomActivityFields(): Promise<IntervalsCustomItem[]> {
+    const items = await this.getCustomItems();
+    // Filter for ACTIVITY_FIELD type
+    return items.filter(item => item.type === 'ACTIVITY_FIELD');
   }
 }

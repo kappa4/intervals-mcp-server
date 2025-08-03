@@ -145,3 +145,21 @@ export interface EventFilters {
   limit?: number;
   cursor?: string;
 }
+
+export interface IntervalsCustomItem {
+  id: number;
+  athlete_id: string;
+  type: 'FITNESS_CHART' | 'TRACE_CHART' | 'INPUT_FIELD' | 'ACTIVITY_FIELD' | 
+        'INTERVAL_FIELD' | 'ACTIVITY_STREAM' | 'ACTIVITY_CHART' | 
+        'ACTIVITY_HISTOGRAM' | 'ACTIVITY_HEATMAP' | 'ACTIVITY_MAP' | 'ACTIVITY_PANEL';
+  visibility: 'PRIVATE' | 'FOLLOWERS' | 'PUBLIC';
+  name: string;
+  description?: string;
+  image?: string;
+  content?: Record<string, any>;
+  usage_count?: number;
+  athlete_only?: boolean;
+  athlete_cannot_edit?: boolean;
+  created?: string;
+  updated?: string;
+}

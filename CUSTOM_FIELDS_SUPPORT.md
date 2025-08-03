@@ -6,6 +6,16 @@ This document describes the custom fields support in the Intervals.icu MCP serve
 
 Intervals.icu supports custom fields for both activities and wellness data. These fields are dynamically added to the API response and are now fully supported in our MCP server implementation.
 
+## Important Discovery
+
+Custom fields in Intervals.icu are managed through a separate API endpoint:
+- Custom field definitions: `/api/v1/athlete/{id}/custom-item`
+- Field types:
+  - `INPUT_FIELD`: Wellness custom fields
+  - `ACTIVITY_FIELD`: Activity custom fields
+
+The actual field values might be stored in the `user_data` object within wellness/activity responses, or at the top level of the response.
+
 ## Implementation Details
 
 ### Type Definitions
