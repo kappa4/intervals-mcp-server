@@ -10,7 +10,7 @@ import type {
   OAuthError 
 } from "../types.ts";
 import { ClientStorage } from "../storage/clients.ts";
-import { generateClientCredentials, CLAUDE_ALLOWED_REDIRECT_URIS } from "../utils.ts";
+import { generateClientCredentials, CLAUDE_ALLOWED_REDIRECT_URIS, validateRedirectUri } from "../utils.ts";
 import { log, info, warn, error } from "../../logger.ts";
 
 export function createRegistrationHandler(clientStorage: ClientStorage) {
@@ -56,7 +56,7 @@ export function createRegistrationHandler(clientStorage: ClientStorage) {
 
       // Filter allowed redirect URIs
       const validRedirectUris = body.redirect_uris.filter(uri => 
-        CLAUDE_ALLOWED_REDIRECT_URIS.includes(uri)
+        validateRedirectUri(uri, CLAUDE_ALLOWED_REDIRECT_URIS)
       );
 
       if (validRedirectUris.length === 0) {

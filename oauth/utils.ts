@@ -89,7 +89,24 @@ export function isExpired(expiresAt: number): boolean {
  * Validate redirect URI
  */
 export function validateRedirectUri(uri: string, allowedUris: string[]): boolean {
-  return allowedUris.includes(uri);
+  // Exact match
+  if (allowedUris.includes(uri)) {
+    return true;
+  }
+  
+  // For development: check localhost
+  if (uri.startsWith("http://localhost:") && uri.includes("/callback")) {
+    return true;
+  }
+  
+  // For development: check ngrok URLs if environment variable is set
+  if (Deno.env.get("ALLOW_NGROK_REDIRECT") === "true") {
+    if (uri.match(/^https:\/\/[a-zA-Z0-9-]+\.(ngrok\.io|ngrok-free\.app)\/callback$/)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
