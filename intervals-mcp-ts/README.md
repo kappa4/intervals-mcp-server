@@ -38,6 +38,13 @@ JWT_SECRET_KEY=your_jwt_secret_minimum_32_chars
 ORIGIN=https://your-deno-deploy-url.deno.dev
 ```
 
+## Deployment
+
+Current deployment:
+- URL: https://kpnco-intervals-mcp-77.deno.dev
+- Platform: Deno Deploy
+- KV Storage: Deno KV (managed)
+
 ## Endpoints
 
 - `GET /health` - Health check
