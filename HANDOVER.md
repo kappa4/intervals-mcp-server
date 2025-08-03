@@ -1,11 +1,13 @@
 # Intervals.icu MCP Server - 引き継ぎドキュメント
 
 ## プロジェクト概要
-Intervals.icu MCP ServerのRemote MCP対応実装プロジェクト。セキュリティ機能を追加し、リモートからの安全なアクセスを可能にしました。
+Intervals.icu MCP ServerのRemote MCP対応実装プロジェクト。OAuth 2.1認証、セキュリティ機能を実装し、Railway本番デプロイまで対応しました。
 
 ## 実施日
-2025-08-02 (OAuth 2.1対応実装完了)
-2025-08-02 (Claude Desktop公開クライアント対応完了)
+- 2025-08-02: OAuth 2.1対応実装完了
+- 2025-08-02: Claude Desktop公開クライアント対応完了  
+- 2025-08-03: プロキシ問題解決・統合サーバー実装完了
+- 2025-08-03: Railway デプロイ対応・Docker 設定完了
 
 ## 実装完了事項
 
@@ -71,14 +73,71 @@ Intervals.icu MCP ServerのRemote MCP対応実装プロジェクト。セキュ�
 - SSEエンドポイント（`/sse`）にOAuth/API Key認証を統合
 - InitializationOptionsにcapabilitiesを追加（Pydanticバリデーションエラー対応）
 
-### 6. ドキュメント更新 ✅
+### 6. プロキシ問題の解決 ✅ (2025-08-03)
+- **問題**: Port 9000→9001 プロキシでセッション ID が転送されない
+- **症状**: `WARNING - Received request without session_id`
+- **解決**: 統合サーバーアーキテクチャ（`simple_integrated.py`）で一本化
+- **パターン**: `request.send.__wrapped__` で FastAPI + FastMCP 統合
+
+### 7. Railway 本番デプロイ対応 ✅ (2025-08-03)
+- **Docker 対応**: Railway 用 Dockerfile 作成
+- **環境変数バリデーション**: 起動時必須チェック実装
+- **デプロイ構成**: `app.py` + `requirements.txt` + `pip install`
+- **CI/CD**: `railway up` による直接デプロイ対応
+
+### 8. ドキュメント更新 ✅
 - `README.md`: Remote MCP機能をベータ版として明記、セキュリティ設定を追加
 - `docs/remote-mcp-auth-proxy.md`: プロキシ認証の実装ガイド
 - `.env.example`: OAuth 2.1関連の環境変数を追加
+- `HANDOVER_RAILWAY_DEPLOYMENT.md`: Railway 特化引き継ぎ資料
+- `TECHNICAL_REFERENCE.md`: 技術詳細リファレンス
 
 ## 技術的発見と重要な知見
 
-### FastMCP vs 独自OAuth実装の比較
+### 1. MCP プロキシアーキテクチャ問題 (2025-08-03解決)
+
+**問題の発見**:
+- Port 9000 (認証プロキシ) → Port 9001 (MCP サーバー) 構成でセッション管理が破綻
+- Claude.ai からの MCP リクエストで `session_id` が転送されない
+- 結果: `WARNING - Received request without session_id` が大量発生
+
+**根本原因**:
+```python
+# 問題のあるプロキシパターン
+async with httpx.AsyncClient() as client:
+    response = await client.request(...)  # session_id消失
+```
+
+**解決策**:
+```python  
+# 成功パターン (simple_integrated.py)
+sse_app = mcp.sse_app()
+@app.get("/")
+async def root_sse(request: Request):
+    return await sse_app(request.scope, request.receive, request.send.__wrapped__)
+```
+
+**教訓**: MCP プロトコルは状態を持つため、プロキシではなく統合サーバーが必須
+
+### 2. Railway デプロイの課題と解決 (2025-08-03)
+
+**遭遇した問題**:
+1. `uv` コマンドが Railway 標準環境に存在しない
+2. `pyproject.toml` が `README.md` を参照するが Docker コンテキストに未含有
+3. `fastmcp` パッケージの `uv` 依存問題
+
+**解決アプローチ**:
+```dockerfile
+# 最終的な成功パターン
+FROM python:3.12-slim
+COPY requirements.txt README.md ./
+RUN pip install --no-cache-dir -r requirements.txt  # uv ではなく pip
+CMD ["python", "app.py"]  # uv run ではなく python 直接
+```
+
+**教訓**: Docker デプロイでは標準的な `pip` + `requirements.txt` が最も確実
+
+### 3. FastMCP vs 独自OAuth実装の比較
 Memory-MCPプロジェクトとの比較分析により以下が判明：
 
 1. **FastMCP 2.11内蔵OAuth機能の制限**
@@ -259,17 +318,49 @@ curl http://localhost:9000/sse \
 }
 ```
 
+## 現在の状況 (2025-08-03 最新)
+
+### ✅ 完了事項
+- **ローカル動作確認**: `simple_integrated.py` が Claude.ai と正常通信中
+- **OAuth 2.1 実装**: 完全な認証フロー実装済み
+- **プロキシ問題解決**: 統合サーバーアーキテクチャで根本解決
+- **Docker設定完了**: Railway用Dockerfile準備完了
+
+### ⚠️ 進行中
+- **Railway デプロイ**: Docker ビルドエラー修正、`railway up` テスト実施中
+
+### 📁 重要ファイル構成
+```
+app.py                          # Railway用エントリーポイント（本番用）
+src/intervals_mcp_server/
+├── simple_integrated.py        # 動作確認済み統合版（変更禁止）
+├── server.py                   # メインMCPサーバー  
+├── oauth.py                    # OAuth 2.1実装
+└── security.py                 # セキュリティ機能
+Dockerfile                      # Railway Docker設定
+requirements.txt                # Python依存関係
+HANDOVER_RAILWAY_DEPLOYMENT.md  # Railway特化引き継ぎ
+TECHNICAL_REFERENCE.md          # 技術詳細
+```
+
 ## 今後の作業
 
-### 短期的改善（優先度：高）
-1. **Claude Desktop実機テスト** 🚀
-   - Ngrok/HTTPS環境でのテスト
-   - 実際のOAuth認証フロー検証
-   - Claude Desktop Settings → Connectorsでの接続確認
+### 最優先（進行中）
+1. **Railway Docker デプロイ完了** 🚀
+   - `railway up` での最終デプロイテスト
+   - 環境変数設定確認（ATHLETE_ID, API_KEY, JWT_SECRET_KEY, BASE_URL）
+   - ヘルスチェック（`/health`）での動作確認
 
-2. **SSEエンドポイント最終調整**
-   - OAuth認証コンテキスト設定の確認
-   - Bearer tokenでのMCP tools実行テスト
+### 短期的改善（優先度：高）
+1. **Claude.ai 接続テスト** 🚀
+   - Railway URL を使った MCP 設定
+   - OAuth認証フロー検証  
+   - 実際のツール動作確認
+
+2. **本番運用準備**
+   - モニタリング設定
+   - ログ管理・分析
+   - エラーアラート設定
 
 ### 中長期的改善
 1. **本番デプロイ環境構築**
@@ -326,4 +417,7 @@ curl http://localhost:9000/sse \
 - MCP公式ドキュメント
 
 ---
-最終更新: 2025-08-02
+**最終更新**: 2025-08-03  
+**担当者**: Claude Code  
+**次回作業**: Railway Docker デプロイ完了 → Claude.ai 接続テスト  
+**重要**: `src/intervals_mcp_server/simple_integrated.py` は現在 Claude.ai と通信中のため変更禁止

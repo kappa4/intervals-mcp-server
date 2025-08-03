@@ -21,7 +21,7 @@ RUN uv sync --frozen
 
 # Copy source code
 COPY src/ ./src/
-COPY main.py ./
+COPY app.py ./
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
@@ -35,4 +35,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the server
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "python", "app.py"]
