@@ -21,6 +21,7 @@ import {
   formatDebugMessage,
   CACHE_KEY_PREFIX,
 } from "./cache-config.ts";
+import { isExpired } from "./cache-utils.ts";
 import { log } from "../logger.ts";
 
 export class WellnessCache implements ICacheManager {
@@ -98,10 +99,29 @@ export class WellnessCache implements ICacheManager {
       this.recordOperationTime(operationTime);
 
       if (result.value) {
+        // Manual TTL check since Deno KV expireIn is not working reliably
+        const ttlMs = result.value.ttl || getTTLMilliseconds(keyComponents.dataType, this.config);
+        if (isExpired(result.value.cachedAt, ttlMs)) {
+          if (this.config.debug) {
+            log("DEBUG", `Cache entry expired: ${result.value.cachedAt}, TTL: ${ttlMs}ms`);
+          }
+          // Entry is expired, delete it
+          await kv.delete(kvKey);
+          this.metrics.totalMisses++;
+          
+          return {
+            success: true,
+            cached: false,
+            metrics: {
+              operationTime,
+              cacheHit: false,
+            },
+          };
+        }
+        
+        // Entry is still valid
         this.metrics.totalHits++;
         
-        // Version check is handled by key prefixing, so if we got a result, it's valid
-
         return {
           success: true,
           data: result.value.value,

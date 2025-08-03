@@ -64,6 +64,17 @@ export function isCacheFresh(cachedAt: string, ttlSeconds: number): boolean {
 }
 
 /**
+ * Check if cache entry is expired
+ */
+export function isExpired(cachedAt: string, ttlMs: number): boolean {
+  const cachedTime = new Date(cachedAt).getTime();
+  const now = Date.now();
+  const ageMs = now - cachedTime;
+  
+  return ageMs >= ttlMs;
+}
+
+/**
  * Format cache size for logging
  */
 export function formatSize(bytes: number): string {

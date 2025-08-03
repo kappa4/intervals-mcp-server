@@ -1,5 +1,8 @@
 {
   "version": "5",
+  "redirects": {
+    "https://esm.sh/zod@^3.23.8?target=denonext": "https://esm.sh/zod@3.25.76?target=denonext"
+  },
   "remote": {
     "https://deno.land/std@0.208.0/assert/_constants.ts": "8a9da298c26750b28b326b297316cdde860bc237533b07e1337c021379e6b2a9",
     "https://deno.land/std@0.208.0/assert/_diff.ts": "58e1461cc61d8eb1eacbf2a010932bf6a05b79344b02ca38095f9b805795dc48",
@@ -74,6 +77,10 @@
     "https://deno.land/std@0.224.0/internal/format.ts": "0a98ee226fd3d43450245b1844b47003419d34d210fa989900861c79820d21c2",
     "https://deno.land/std@0.224.0/internal/mod.ts": "534125398c8e7426183e12dc255bb635d94e06d0f93c60a297723abe69d3b22e",
     "https://deno.land/std@0.224.0/testing/_test_suite.ts": "f10a8a6338b60c403f07a76f3f46bdc9f1e1a820c0a1decddeb2949f7a8a0546",
-    "https://deno.land/std@0.224.0/testing/bdd.ts": "3e4de4ff6d8f348b5574661cef9501b442046a59079e201b849d0e74120d476b"
+    "https://deno.land/std@0.224.0/testing/bdd.ts": "3e4de4ff6d8f348b5574661cef9501b442046a59079e201b849d0e74120d476b",
+    "https://esm.sh/@modelcontextprotocol/sdk@1.0.0/denonext/types.mjs": "8c495c9a97357e8c7b89af7c134f89004d8c7e181927a2df61c2764aec93320c",
+    "https://esm.sh/@modelcontextprotocol/sdk@1.0.0/types.js": "89b2a7e7e2e74a66965abc82c18d51c08b10497d3d55e0d273f0e6384de5b324",
+    "https://esm.sh/zod@3.25.76/denonext/zod.mjs": "9f643d0cc560840b7fa3b6e6fc3a5a41595f12ff8863cac0ccbae3ec98989284",
+    "https://esm.sh/zod@3.25.76?target=denonext": "7d2e5b7450d6f99b9b3b228958bd1291d5a1f8378f82b8cdd2ce83b2f14961c2"
   }
 }
