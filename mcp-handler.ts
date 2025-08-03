@@ -218,7 +218,7 @@ export class MCPHandler {
             type: "object",
             properties: {
               activity_id: {
-                type: "number",
+                type: "string",
                 description: "The ID of the activity to retrieve"
               }
             },

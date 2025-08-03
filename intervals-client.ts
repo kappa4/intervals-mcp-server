@@ -106,16 +106,23 @@ export class IntervalsAPIClient {
     return { data };
   }
 
-  async getActivity(activityId: number): Promise<IntervalsActivity> {
-    // Use the athlete-specific endpoint that accepts multiple IDs
-    // We only pass one ID but the endpoint returns an array
-    const data = await this.makeRequest<IntervalsActivity[]>(`/activities/${activityId}`);
-    
-    if (data.length === 0) {
-      throw new Error(`Activity ${activityId} not found`);
+  async getActivity(activityId: string): Promise<IntervalsActivity> {
+    try {
+      // Use the athlete-specific endpoint that accepts multiple IDs
+      // We only pass one ID but the endpoint returns an array
+      const data = await this.makeRequest<IntervalsActivity[]>(`/activities/${activityId}`);
+      
+      if (data.length === 0) {
+        throw new Error(`Activity ${activityId} not found. This could mean: 1) The activity doesn't exist, 2) It's private/deleted, or 3) You don't have access to it.`);
+      }
+      
+      return data[0];
+    } catch (error) {
+      if (error.message.includes('404')) {
+        throw new Error(`Activity ${activityId} not found. Please verify the activity ID from get_activities results.`);
+      }
+      throw error;
     }
-    
-    return data[0];
   }
 
   async updateActivity(activityId: number, data: Partial<IntervalsActivity>): Promise<IntervalsActivity> {

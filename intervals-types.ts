@@ -4,7 +4,7 @@
  */
 
 export interface IntervalsActivity {
-  id: number;
+  id: string;
   start_date_local: string;
   type: string;
   name: string;
