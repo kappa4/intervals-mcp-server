@@ -139,7 +139,8 @@ When modifying API integration:
 
 ### 3. update_activity returns 405 Method Not Allowed
 **Problem**: Intervals.icu API doesn't support activity updates via API
-**Solution**: Return clear error message that updates must be done via web interface
+**Solution**: ~~Return clear error message that updates must be done via web interface~~
+**Final Solution**: Removed the `update_activity` tool entirely from the MCP server
 
 ### 4. update_wellness returns undefined date
 **Problem**: API response doesn't include the date field

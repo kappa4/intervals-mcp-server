@@ -36,7 +36,7 @@ intervals-mcp-ts/
 - **ログシステム**: Memory MCP準拠のStructured Logging
 - **Intervals.icu API**: 完全なTypeScript実装（Activities, Wellness, Events, Athlete等）
 - **MCP プロトコル**: JSON-RPC 2.0ベースの完全実装
-- **MCPツール6種**: get_activities, get_activity, update_activity, get_wellness, update_wellness, get_athlete_info
+- **MCPツール5種**: get_activities, get_activity, get_wellness, update_wellness, get_athlete_info
 - **Health Check**: `/health`, `/info`エンドポイント
 
 **🟡 実装中:**
@@ -61,7 +61,7 @@ const wellness = await client.getWellnessData({ limit: 7 });
 **MCPツール実装:**
 - `get_activities`: フィルタリング対応（type, date range, limit）
 - `get_activity`: 詳細情報取得
-- `update_activity`: 名前・説明・タイプ更新
+- ~~`update_activity`: 名前・説明・タイプ更新~~ (API制限により削除)
 - `get_wellness`: 期間指定wellness取得
 - `update_wellness`: wellness指標更新
 - `get_athlete_info`: プロファイル情報

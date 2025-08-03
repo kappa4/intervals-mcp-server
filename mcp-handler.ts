@@ -226,32 +226,6 @@ export class MCPHandler {
           }
         },
         {
-          name: "update_activity",
-          description: "Update an activity's information",
-          inputSchema: {
-            type: "object",
-            properties: {
-              activity_id: {
-                type: "number",
-                description: "The ID of the activity to update"
-              },
-              name: {
-                type: "string",
-                description: "New name for the activity"
-              },
-              description: {
-                type: "string",
-                description: "New description for the activity"
-              },
-              type: {
-                type: "string",
-                description: "Activity type (e.g., 'Ride', 'Run', 'Swim')"
-              }
-            },
-            required: ["activity_id"]
-          }
-        },
-        {
           name: "get_wellness",
           description: "Get wellness data from Intervals.icu",
           inputSchema: {
@@ -346,9 +320,6 @@ export class MCPHandler {
           break;
         case "get_activity":
           result = await this.getActivity(args);
-          break;
-        case "update_activity":
-          result = await this.updateActivity(args);
           break;
         case "get_wellness":
           result = await this.getWellness(args);
@@ -453,17 +424,6 @@ export class MCPHandler {
     }
     
     return result;
-  }
-
-  private async updateActivity(args: any): Promise<string> {
-    const { activity_id, ...updateData } = args;
-    
-    if (!activity_id) {
-      throw new Error("activity_id is required");
-    }
-
-    // Note: The Intervals.icu API does not support updating activities
-    throw new Error("Activity updates are not supported by the Intervals.icu API. Activities can only be modified through the web interface.");
   }
 
   private async getWellness(args: any): Promise<string> {
