@@ -92,35 +92,15 @@ export class IntervalsAPIClient {
   }
 
   async getActivity(activityId: number): Promise<IntervalsActivity> {
-    // Use the global activity endpoint instead of athlete-specific one
-    const url = `${this.baseUrl}/api/v1/activity/${activityId}`;
+    // Use the athlete-specific endpoint that accepts multiple IDs
+    // We only pass one ID but the endpoint returns an array
+    const data = await this.makeRequest<IntervalsActivity[]>(`/activities/${activityId}`);
     
-    const headers = {
-      "Authorization": `Basic ${btoa(`API_KEY:${this.apiKey}`)}`,
-      "Content-Type": "application/json",
-    };
-
-    log("DEBUG", `Making request to ${url}`);
-
-    try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        log("ERROR", `API request failed: ${response.status} ${response.statusText} - ${errorText}`);
-        throw new Error(`Intervals.icu API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      log("DEBUG", `Request successful, received activity data`);
-      return data as IntervalsActivity;
-    } catch (error) {
-      log("ERROR", `Request failed: ${error.message}`);
-      throw error;
+    if (data.length === 0) {
+      throw new Error(`Activity ${activityId} not found`);
     }
+    
+    return data[0];
   }
 
   async updateActivity(activityId: number, data: Partial<IntervalsActivity>): Promise<IntervalsActivity> {

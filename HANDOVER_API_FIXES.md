@@ -146,6 +146,20 @@ When modifying API integration:
 **Problem**: API response doesn't include the date field
 **Solution**: Fallback to input date when response.date is undefined
 
+### 5. get_activity returns 404 Error (2025-08-03)
+**Problem**: Using `/api/v1/activity/{id}` endpoint returns 404
+**Root Cause**: Wrong endpoint - should use `/api/v1/athlete/{athleteId}/activities/{ids}`
+**Solution**: Use the athlete-specific endpoint that accepts multiple IDs
+
+```typescript
+// Before: Using global activity endpoint
+const url = `${this.baseUrl}/api/v1/activity/${activityId}`;
+
+// After: Using athlete-specific endpoint
+const data = await this.makeRequest<IntervalsActivity[]>(`/activities/${activityId}`);
+return data[0];
+```
+
 ## References
 
 - OpenAPI Spec: `docs/intervals-openapi-spec.json`
