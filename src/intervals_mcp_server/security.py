@@ -130,7 +130,7 @@ def get_cors_origins() -> list[str]:
         return ["*"]
     
     origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
-    logger.info(f"CORS allowed origins: {origins}")
+    logger.debug(f"CORS allowed origins: {origins}")
     return origins
 
 
@@ -154,7 +154,7 @@ async def log_request(request: Request, call_next):
         return await call_next(request)
     
     # Log request details
-    logger.info(f"Request: {request.method} {request.url.path} from {request.client.host}")
+    logger.debug(f"Request: {request.method} {request.url.path} from {request.client.host}")
     
     # Log security-relevant headers
     logger.debug(f"Headers: Origin={request.headers.get('origin')}, "
@@ -165,6 +165,6 @@ async def log_request(request: Request, call_next):
     response = await call_next(request)
     
     # Log response status
-    logger.info(f"Response: {response.status_code} for {request.method} {request.url.path}")
+    logger.debug(f"Response: {response.status_code} for {request.method} {request.url.path}")
     
     return response
