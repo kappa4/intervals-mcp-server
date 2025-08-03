@@ -118,7 +118,13 @@ export class MCPHandler {
           result = await this.handleInitialize(request.params as InitializeRequest);
           break;
         case "initialized":
+        case "notifications/initialized":
           // No response needed for notification
+          debug("Client sent initialized notification");
+          if (!request.id) {
+            // Notifications don't have id, so return nothing
+            return {} as MCPResponse;
+          }
           return this.createResponse(request.id, {});
         case "tools/list":
           result = await this.handleListTools();

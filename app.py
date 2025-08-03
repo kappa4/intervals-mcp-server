@@ -19,7 +19,11 @@ import logging
 
 # Set up logging
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 logger = logging.getLogger("intervals_mcp_production")
 
 def validate_environment():
@@ -59,7 +63,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-# Import the existing mcp instance and app from server.py
+# Force integrated mode (disable proxy mode in server.py)
+os.environ["AUTO_START_MCP"] = "false"
+
+# Import the existing mcp instance and app from server.py (same as simple_integrated.py)
 from intervals_mcp_server.server import mcp, app
 
 # Additional imports for OAuth endpoints
@@ -71,6 +78,9 @@ from intervals_mcp_server.oauth import (
     register_oauth_client,
     handle_authorization_request,
     handle_token_request,
+    get_protected_resource_metadata,
+    get_authorization_server_metadata,
+    create_jwks,
 )
 
 # OAuth endpoints
@@ -117,21 +127,38 @@ async def root_sse_endpoint(request: Request):
     """
     Root endpoint serves MCP SSE transport.
     
-    This uses the proven pattern: request.send.__wrapped__
+    This uses the FastMCP SSE app directly with environment-aware send function.
     """
-    return await sse_app(request.scope, request.receive, request.send.__wrapped__)
+    # Environment-aware send function selection
+    # Railway environment requires _send, local development uses send.__wrapped__
+    if hasattr(request, 'send') and hasattr(request.send, '__wrapped__'):
+        send_func = request.send.__wrapped__
+    else:
+        send_func = request._send
+    
+    return await sse_app(request.scope, request.receive, send_func)
 
 @app.get("/sse")
 @app.post("/sse")
 async def sse_endpoint(request: Request):
     """SSE endpoint for MCP protocol compatibility."""
-    return await sse_app(request.scope, request.receive, request.send.__wrapped__)
+    if hasattr(request, 'send') and hasattr(request.send, '__wrapped__'):
+        send_func = request.send.__wrapped__
+    else:
+        send_func = request._send
+    
+    return await sse_app(request.scope, request.receive, send_func)
 
 @app.get("/mcp")
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
     """MCP endpoint for protocol compatibility."""
-    return await sse_app(request.scope, request.receive, request.send.__wrapped__)
+    if hasattr(request, 'send') and hasattr(request.send, '__wrapped__'):
+        send_func = request.send.__wrapped__
+    else:
+        send_func = request._send
+    
+    return await sse_app(request.scope, request.receive, send_func)
 
 # Messages endpoint for MCP protocol
 @app.post("/messages/{path:path}")
@@ -141,9 +168,31 @@ async def messages_endpoint(path: str, request: Request):
     
     Handles MCP JSON-RPC messages with proper session management.
     """
+    # Environment-aware send function selection
+    if hasattr(request, 'send') and hasattr(request.send, '__wrapped__'):
+        send_func = request.send.__wrapped__
+    else:
+        send_func = request._send
+    
     # Update request scope to include the full path for proper routing
     request.scope["path"] = f"/messages/{path}"
-    return await sse_app(request.scope, request.receive, request.send.__wrapped__)
+    return await sse_app(request.scope, request.receive, send_func)
+
+# OAuth 2.1 Discovery endpoints
+@app.get("/.well-known/oauth-protected-resource")
+async def oauth_protected_resource_metadata():
+    """OAuth 2.1 Protected Resource Metadata discovery endpoint."""
+    return get_protected_resource_metadata()
+
+@app.get("/.well-known/oauth-authorization-server")
+async def oauth_authorization_server_metadata():
+    """OAuth 2.1 Authorization Server Metadata discovery endpoint."""
+    return get_authorization_server_metadata()
+
+@app.get("/.well-known/jwks.json")
+async def jwks_endpoint():
+    """JSON Web Key Set endpoint for token verification."""
+    return create_jwks()
 
 # Enhanced health check endpoint
 @app.get("/health")
@@ -192,4 +241,6 @@ if __name__ == "__main__":
         logger.debug("OAuth 2.1 authentication and MCP protocol integrated")
         logger.info("Ready for Claude.ai connections")
         
-        uvicorn.run(app, host=HOST, port=PORT, log_level="info", access_log=True)
+        # Use consistent log level for uvicorn
+        uvicorn_log_level = log_level.lower() if log_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR'] else 'info'
+        uvicorn.run(app, host=HOST, port=PORT, log_level=uvicorn_log_level, access_log=True)

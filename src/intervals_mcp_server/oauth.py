@@ -197,14 +197,14 @@ async def verify_jwt_token(authorization: Optional[str] = Header(None)) -> Dict[
             algorithms=[JWT_ALGORITHM],
             options={"verify_aud": False}  # Disable audience check for Claude Desktop compatibility
         )
-        logger.info(f"JWT decoded successfully. Audience in token: {payload.get('aud')}, Expected: {OAUTH_AUDIENCE}")
+        logger.debug(f"JWT decoded successfully. Audience in token: {payload.get('aud')}, Expected: {OAUTH_AUDIENCE}")
         
         # Verify token expiration
         if "exp" in payload:
             exp_timestamp = payload["exp"]
             current_time = datetime.now(timezone.utc)
             exp_time = datetime.fromtimestamp(exp_timestamp, timezone.utc)
-            logger.info(f"Token time check - Current: {current_time}, Expires: {exp_time}, Expired: {current_time > exp_time}")
+            logger.debug(f"Token time check - Current: {current_time}, Expires: {exp_time}, Expired: {current_time > exp_time}")
             if current_time > exp_time:
                 logger.warning(f"JWT token validation failed: Token expired (current: {current_time}, exp: {exp_time})")
                 raise HTTPException(
@@ -278,14 +278,14 @@ def verify_jwt_token_sync(authorization: str) -> Dict[str, Any]:
             algorithms=[JWT_ALGORITHM],
             options={"verify_aud": False}  # Disable audience check for Claude Desktop compatibility
         )
-        logger.info(f"JWT decoded successfully. Audience in token: {payload.get('aud')}, Expected: {OAUTH_AUDIENCE}")
+        logger.debug(f"JWT decoded successfully. Audience in token: {payload.get('aud')}, Expected: {OAUTH_AUDIENCE}")
         
         # Verify token expiration
         if "exp" in payload:
             exp_timestamp = payload["exp"]
             current_time = datetime.now(timezone.utc)
             exp_time = datetime.fromtimestamp(exp_timestamp, timezone.utc)
-            logger.info(f"Token time check - Current: {current_time}, Expires: {exp_time}, Expired: {current_time > exp_time}")
+            logger.debug(f"Token time check - Current: {current_time}, Expires: {exp_time}, Expired: {current_time > exp_time}")
             if current_time > exp_time:
                 logger.warning(f"JWT token validation failed: Token expired (current: {current_time}, exp: {exp_time})")
                 raise HTTPException(
@@ -659,13 +659,13 @@ async def handle_token_request(
         if not verify_pkce(code_verifier, auth_data["code_challenge"], auth_data["code_challenge_method"]):
             raise HTTPException(status_code=400, detail="PKCE verification failed")
         
-        logger.info(f"PKCE verification successful for public client {client_id}")
+        logger.debug(f"PKCE verification successful for public client {client_id}")
     else:
         # Confidential client: verify client secret
         if client_secret != client["client_secret"]:
             raise HTTPException(status_code=400, detail="Invalid client secret")
         
-        logger.info(f"Client secret verification successful for confidential client {client_id}")
+        logger.debug(f"Client secret verification successful for confidential client {client_id}")
     
     # Mark authorization code as used
     auth_data["used"] = True

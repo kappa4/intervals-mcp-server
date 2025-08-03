@@ -3,6 +3,17 @@
 
 Model Context Protocol (MCP) server for connecting Claude with the Intervals.icu API. It provides tools for authentication and data retrieval for activities, events, and wellness data.
 
+## 🚨 Important: TypeScript Migration in Progress
+
+**Current Status**: Migrating from Python/Railway to TypeScript/Deno Deploy  
+**Phase 1**: ✅ Complete (Basic infrastructure, API client, MCP protocol)  
+**Phase 2**: ⚠️ OAuth 2.1 integration needed  
+**Phase 3**: ⚠️ Deno Deploy deployment needed  
+
+**For the latest progress, see**: `intervals-mcp-ts/HANDOVER_TYPESCRIPT_MIGRATION.md`
+
+**Reason for migration**: Resolving persistent SSE 404 errors in Python/Railway environment by adopting the proven Memory MCP Deno Deploy pattern.
+
 If you find the Model Context Protocol (MCP) server useful, please consider supporting its continued development with a donation.
 
 ## Requirements

@@ -97,7 +97,7 @@ log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("intervals_icu_mcp_server")
 
@@ -172,10 +172,13 @@ app.router.lifespan_context = lifespan
 
 # HTTP/SSE mode setup
 if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio":
-    if "--mcp-only" in sys.argv:
-        # MCP-only mode: Run FastMCP SSE server directly
-        logger.info("Starting in MCP-only mode (SSE server)")
-        # This will be handled in __main__ section
+    # Check for integrated mode (when used via app.py) or standalone mode
+    integrated_mode = os.getenv("AUTO_START_MCP", "true").lower() == "false" or "--mcp-only" in sys.argv
+    
+    if integrated_mode:
+        # Integrated mode: FastMCP SSE server directly (used by app.py)
+        logger.debug("Running in integrated mode (SSE endpoints via FastMCP)")
+        # This will be handled in __main__ section or used via app.py
     else:
         # Full mode: FastAPI with OAuth + proxy to MCP
         from fastapi.responses import StreamingResponse
@@ -259,35 +262,38 @@ if "--stdio" not in sys.argv and os.getenv("MCP_MODE") != "stdio":
                         headers=dict(response.headers)
                     )
         
-        # Root endpoint - proxy to /sse
-        @app.get("/")
-        @app.post("/")
-        @app.head("/")
-        async def root_endpoint(request: Request):
-            """Root endpoint - proxy to MCP /sse"""
-            return await proxy_sse_to_mcp(request, "/sse")
-        
-        # /mcp endpoint - also proxy to /sse
-        @app.get("/mcp")
-        @app.post("/mcp")
-        async def mcp_endpoint(request: Request):
-            """MCP endpoint - proxy to MCP /sse"""
-            return await proxy_sse_to_mcp(request, "/sse")
-        
-        # /sse endpoint - direct proxy
-        @app.get("/sse")
-        @app.post("/sse")
-        async def sse_endpoint(request: Request):
-            """SSE endpoint - direct proxy"""
-            return await proxy_sse_to_mcp(request, "/sse")
-        
-        # /messages/* endpoint - proxy with path
-        @app.post("/messages/{path:path}")
-        async def messages_endpoint(path: str, request: Request):
-            """Messages endpoint - proxy to MCP"""
-            return await proxy_sse_to_mcp(request, f"/messages/{path}")
-        
-        logger.debug(f"HTTP/SSE proxy mode enabled: Proxying to MCP server at {MCP_INTERNAL_URL}")
+        # Register proxy endpoints only in proxy mode (not in integrated mode)
+        if not integrated_mode:
+            @app.get("/")
+            @app.post("/")
+            @app.head("/")
+            async def root_endpoint(request: Request):
+                """Root endpoint - proxy to MCP /sse"""
+                return await proxy_sse_to_mcp(request, "/sse")
+            
+            # /mcp endpoint - also proxy to /sse
+            @app.get("/mcp")
+            @app.post("/mcp")
+            async def mcp_endpoint(request: Request):
+                """MCP endpoint - proxy to MCP /sse"""
+                return await proxy_sse_to_mcp(request, "/sse")
+            
+            # /sse endpoint - direct proxy
+            @app.get("/sse")
+            @app.post("/sse")
+            async def sse_endpoint(request: Request):
+                """SSE endpoint - direct proxy"""
+                return await proxy_sse_to_mcp(request, "/sse")
+            
+            # /messages/* endpoint - proxy with path
+            @app.post("/messages/{path:path}")
+            async def messages_endpoint(path: str, request: Request):
+                """Messages endpoint - proxy to MCP"""
+                return await proxy_sse_to_mcp(request, f"/messages/{path}")
+            
+            logger.debug(f"HTTP/SSE proxy mode enabled: Proxying to MCP server at {MCP_INTERNAL_URL}")
+        else:
+            logger.debug("Integrated mode: Proxy endpoints not registered, using app.py endpoints")
 
 # Message handling is done via FastMCP's SSE app
 

@@ -8,6 +8,20 @@ Intervals.icu MCP ServerのRemote MCP対応実装プロジェクト。OAuth 2.1�
 - 2025-08-02: Claude Desktop公開クライアント対応完了  
 - 2025-08-03: プロキシ問題解決・統合サーバー実装完了
 - 2025-08-03: Railway デプロイ対応・Docker 設定完了
+- 2025-08-03: **TypeScript/Deno Deploy移行開始（Phase 1完了）**
+
+## 🚨 重要: TypeScript移行プロジェクト実施中
+
+**最新作業**: PythonからTypeScript/Deno Deployへの移行を実施中  
+**Phase 1完了**: 基盤構築、API実装、MCPプロトコル実装済み  
+**詳細資料**: `intervals-mcp-ts/HANDOVER_TYPESCRIPT_MIGRATION.md` **←再開時はこちらを確認**  
+
+**現状:**
+- ✅ TypeScript版基盤完了 (`intervals-mcp-ts/`ディレクトリ)
+- ⚠️ OAuth 2.1認証統合が必要（Memory MCPパターン適用予定）
+- ⚠️ Deno Deployデプロイが必要
+
+**理由**: Python/Railway環境でのSSE 404エラー解決困難、Memory MCPのDeno Deploy成功パターンを活用
 
 ## 実装完了事項
 
