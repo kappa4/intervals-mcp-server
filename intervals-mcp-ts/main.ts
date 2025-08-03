@@ -56,6 +56,15 @@ const intervalsClient = new IntervalsAPIClient({
 const origin = Deno.env.get("ORIGIN")!;
 const oauthServer = new OAuthServer(origin);
 
+// Initialize OAuth server (register Claude Web client)
+try {
+  await oauthServer.initialize();
+  info("[Main] OAuth server initialized successfully");
+} catch (err) {
+  error("[Main] Failed to initialize OAuth server:", err);
+  // Continue anyway - the server might still work if clients are already registered
+}
+
 // Initialize MCP handler
 const mcpHandler = new MCPHandler(intervalsClient, oauthServer);
 
