@@ -30,6 +30,8 @@ export interface IntervalsActivity {
   external_id?: string;
   created: string;
   updated: string;
+  // Custom fields can be added dynamically
+  [key: string]: any;
 }
 
 export interface IntervalsWellness {
@@ -53,6 +55,8 @@ export interface IntervalsWellness {
   injured?: boolean;
   notes?: string;
   user_data?: Record<string, any>;
+  // Custom fields can be added dynamically
+  [key: string]: any;
 }
 
 export interface IntervalsEventData {

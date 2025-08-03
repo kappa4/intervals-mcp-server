@@ -9,6 +9,7 @@ A Model Context Protocol (MCP) server for Intervals.icu built with TypeScript an
 - **Intervals.icu API Integration** for fitness data management
 - **Deno Deploy** for reliable serverless hosting
 - **Type Safety** with full TypeScript support
+- **Custom Fields Support** for activities and wellness data
 
 ## Based on Memory MCP Success Pattern
 

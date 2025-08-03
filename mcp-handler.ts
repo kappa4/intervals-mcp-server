@@ -352,6 +352,28 @@ export class MCPHandler {
     }
   }
 
+  private getCustomFields(obj: any, knownFields: string[]): Record<string, any> {
+    const customFields: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (!knownFields.includes(key) && value !== null && value !== undefined) {
+        customFields[key] = value;
+      }
+    }
+    return customFields;
+  }
+
+  private formatCustomFields(customFields: Record<string, any>): string {
+    let result = "";
+    const entries = Object.entries(customFields);
+    if (entries.length > 0) {
+      result += "\n**Custom Fields:**\n";
+      for (const [key, value] of entries) {
+        result += `- ${key}: ${value}\n`;
+      }
+    }
+    return result;
+  }
+
   private async getActivities(args: any): Promise<string> {
     const { limit = 10, type, oldest, newest } = args;
     
@@ -386,6 +408,24 @@ export class MCPHandler {
       if (activity.icu_training_load) {
         result += `- Training Load: ${activity.icu_training_load}\n`;
       }
+      
+      // Add custom fields if any
+      const knownFields = [
+        'id', 'start_date_local', 'type', 'name', 'description', 'distance',
+        'moving_time', 'elapsed_time', 'total_elevation_gain', 'trainer',
+        'commute', 'icu_training_load', 'icu_atl', 'icu_ctl', 'icu_tss',
+        'icu_intensity', 'icu_ri', 'icu_ef', 'icu_hr_zones', 'icu_power_zones',
+        'power_meter', 'power_meter_battery', 'heart_rate_monitor', 'external_id',
+        'created', 'updated'
+      ];
+      const customFields = this.getCustomFields(activity, knownFields);
+      if (Object.keys(customFields).length > 0) {
+        result += "**Custom Fields:**\n";
+        for (const [key, value] of Object.entries(customFields)) {
+          result += `- ${key}: ${value}\n`;
+        }
+      }
+      
       result += "\n";
     }
 
@@ -423,6 +463,18 @@ export class MCPHandler {
       result += `- Intensity: ${activity.icu_intensity}\n`;
     }
     
+    // Add custom fields if any
+    const knownFields = [
+      'id', 'start_date_local', 'type', 'name', 'description', 'distance',
+      'moving_time', 'elapsed_time', 'total_elevation_gain', 'trainer',
+      'commute', 'icu_training_load', 'icu_atl', 'icu_ctl', 'icu_tss',
+      'icu_intensity', 'icu_ri', 'icu_ef', 'icu_hr_zones', 'icu_power_zones',
+      'power_meter', 'power_meter_battery', 'heart_rate_monitor', 'external_id',
+      'created', 'updated'
+    ];
+    const customFields = this.getCustomFields(activity, knownFields);
+    result += this.formatCustomFields(customFields);
+    
     return result;
   }
 
@@ -452,6 +504,22 @@ export class MCPHandler {
       if (entry.weight) result += `- Weight: ${entry.weight}kg\n`;
       if (entry.resting_hr) result += `- Resting HR: ${entry.resting_hr}bpm\n`;
       if (entry.notes) result += `- Notes: ${entry.notes}\n`;
+      
+      // Add custom fields if any
+      const knownFields = [
+        'id', 'created', 'updated', 'date', 'sleep_quality', 'sleep_hours',
+        'soreness', 'fatigue', 'stress', 'motivation', 'weight', 'body_fat',
+        'hr_variability', 'hrv_rmssd', 'resting_hr', 'menstrual_phase',
+        'sick', 'injured', 'notes', 'user_data'
+      ];
+      const customFields = this.getCustomFields(entry, knownFields);
+      if (Object.keys(customFields).length > 0) {
+        result += "**Custom Fields:**\n";
+        for (const [key, value] of Object.entries(customFields)) {
+          result += `- ${key}: ${value}\n`;
+        }
+      }
+      
       result += "\n";
     }
 
