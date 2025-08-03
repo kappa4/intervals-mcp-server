@@ -92,17 +92,35 @@ export class IntervalsAPIClient {
   }
 
   async getActivity(activityId: number): Promise<IntervalsActivity> {
-    // The API uses a different path pattern and returns an array
-    const athleteIdNumeric = this.athleteId.replace('i', '');
-    const response = await this.makeRequest<IntervalsActivity[]>(
-      `/../../../api/v1/athlete/${athleteIdNumeric}/activities/${activityId}`
-    );
+    // Use the global activity endpoint instead of athlete-specific one
+    const url = `${this.baseUrl}/api/v1/activity/${activityId}`;
     
-    if (!response || response.length === 0) {
-      throw new Error(`Activity ${activityId} not found`);
+    const headers = {
+      "Authorization": `Basic ${btoa(`API_KEY:${this.apiKey}`)}`,
+      "Content-Type": "application/json",
+    };
+
+    log("DEBUG", `Making request to ${url}`);
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        log("ERROR", `API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Intervals.icu API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      log("DEBUG", `Request successful, received activity data`);
+      return data as IntervalsActivity;
+    } catch (error) {
+      log("ERROR", `Request failed: ${error.message}`);
+      throw error;
     }
-    
-    return response[0];
   }
 
   async updateActivity(activityId: number, data: Partial<IntervalsActivity>): Promise<IntervalsActivity> {
