@@ -6,6 +6,10 @@ This document describes the custom fields support in the Intervals.icu MCP serve
 
 Intervals.icu supports custom fields for both activities and wellness data. These fields are dynamically added to the API response and are now fully supported in our MCP server implementation.
 
+**✅ TESTED AND WORKING**: Wellness custom fields like `UCRVolatilityBandPosition` are successfully detected and displayed.
+
+**📋 See detailed specification**: `CUSTOM_FIELDS_SPECIFICATION.md`
+
 ## Important Discovery
 
 Custom fields in Intervals.icu are managed through a separate API endpoint:

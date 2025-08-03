@@ -76,3 +76,14 @@ Current deployment:
   }
 }
 ```
+
+## Custom Fields Support
+
+✅ **Fully implemented and tested** - Custom fields are automatically detected and displayed:
+
+- **Wellness custom fields**: `UCRVolatilityBandPosition`, custom health metrics
+- **Activity custom fields**: `session_rpe`, `Tags`, training metrics
+- **Automatic detection**: Fields are identified at the top level of API responses
+- **Separate display**: Custom fields shown in dedicated sections
+
+See `CUSTOM_FIELDS_SPECIFICATION.md` for complete technical details.
