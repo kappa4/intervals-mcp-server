@@ -74,11 +74,29 @@ export function createAuthorizationHandler(
       // Validate client
       const client = await clientStorage.get(authRequest.client_id);
       if (!client) {
+        warn(`[OAuth] Client not found: ${authRequest.client_id}`);
+        
+        // Log all registered clients for debugging
+        const allClients = await clientStorage.list();
+        log("[OAuth] Registered clients:", allClients.map(c => ({ id: c.client_id, name: c.client_name })));
+        
         const errorParams = new URLSearchParams({
-          error: "invalid_client",
+          error: "invalid_client", 
           error_description: "Client not found",
         });
         if (authRequest.state) errorParams.set("state", authRequest.state);
+        
+        // Make sure redirect_uri is valid before redirecting
+        if (!authRequest.redirect_uri) {
+          warn("[OAuth] No redirect_uri provided with invalid_client error");
+          return new Response(JSON.stringify({
+            error: "invalid_client",
+            error_description: "Client not found and no redirect_uri provided"
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         
         return Response.redirect(`${authRequest.redirect_uri}?${errorParams}`, 302);
       }

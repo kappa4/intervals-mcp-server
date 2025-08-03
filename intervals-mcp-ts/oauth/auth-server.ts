@@ -54,6 +54,15 @@ export class OAuthServer {
   }
 
   /**
+   * Initialize the OAuth server and register Claude Web client
+   */
+  async initialize(): Promise<void> {
+    // Register Claude Web client on startup
+    await this.registerClaudeWebClient();
+    info("[OAuth] OAuth server initialization complete");
+  }
+
+  /**
    * Route OAuth requests to appropriate handlers
    */
   async handleRequest(req: Request, path: string): Promise<Response | null> {
@@ -107,5 +116,52 @@ export class OAuthServer {
       codes: this.codeStorage,
       tokens: this.tokenStorage,
     };
+  }
+  
+  /**
+   * Register Claude Web's expected clients on startup
+   * Claude.ai uses fixed client_ids instead of Dynamic Client Registration
+   */
+  private async registerClaudeWebClient() {
+    // Claude.ai uses different client_ids - register all known ones
+    const claudeClients = [
+      {
+        client_id: "vxOwrOKlZZO40tGXzqeR0A",  // Previously known ID
+        client_secret: undefined,
+        client_name: "Claude (Legacy)",
+        redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        is_public_client: true,
+        created_at: Date.now(),
+      },
+      {
+        client_id: "FTv44phrjVgJyzvJrU7dGg",  // Currently used ID
+        client_secret: undefined,
+        client_name: "Claude",
+        redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        is_public_client: true,
+        created_at: Date.now(),
+      }
+    ];
+    
+    for (const claudeClient of claudeClients) {
+      try {
+        // Check if client already exists
+        const existing = await this.clientStorage.get(claudeClient.client_id);
+        if (!existing) {
+          await this.clientStorage.store(claudeClient);
+          info("[OAuth] Claude Web client registered on startup:", claudeClient.client_id);
+        } else {
+          log("[OAuth] Claude Web client already registered:", claudeClient.client_id);
+        }
+      } catch (error) {
+        log("[OAuth] Error registering Claude Web client:", error);
+      }
+    }
   }
 }

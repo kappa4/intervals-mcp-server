@@ -83,6 +83,18 @@ export class MCPHandler {
 
       const mcpResponse = await this.handleMCPRequest(mcpRequest);
       
+      // If no response (for notifications), return 202 Accepted with no body
+      if (!mcpResponse) {
+        debug("Notification processed, returning 202 Accepted");
+        return new Response(null, {
+          status: 202,
+          headers: {
+            ...corsHeaders,
+            "mcp-session-id": crypto.randomUUID(),
+          },
+        });
+      }
+      
       return new Response(JSON.stringify(mcpResponse), {
         headers: { 
           ...corsHeaders, 
@@ -123,7 +135,8 @@ export class MCPHandler {
           debug("Client sent initialized notification");
           if (!request.id) {
             // Notifications don't have id, so return nothing
-            return {} as MCPResponse;
+            // This will be handled by the HTTP handler to return 202 Accepted
+            return null as any;
           }
           return this.createResponse(request.id, {});
         case "tools/list":
@@ -170,7 +183,7 @@ export class MCPHandler {
   }
 
   private async handleListTools(): Promise<ListToolsResponse> {
-    return {
+    const response = {
       tools: [
         {
           name: "get_activities",
@@ -316,6 +329,9 @@ export class MCPHandler {
         }
       ]
     };
+    
+    debug("Returning tools list with", response.tools.length, "tools");
+    return response;
   }
 
   private async handleCallTool(params: CallToolRequest): Promise<CallToolResponse> {
