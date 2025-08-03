@@ -1,32 +1,47 @@
 /**
  * OAuth Client Storage for Intervals MCP Server
- * Using in-memory storage for now (suitable for single-instance deployment)
+ * Using Deno KV for persistent storage across deployments
  */
 
 import type { OAuthClient } from "../types.ts";
+import { KVStorageBase } from "./kv-base.ts";
 
-export class ClientStorage {
-  private clients = new Map<string, OAuthClient>();
-
+export class ClientStorage extends KVStorageBase {
   constructor() {
-    // In-memory storage for demo
-    // Production would use Deno KV or external storage
+    super("oauth_clients");
   }
 
   async store(client: OAuthClient): Promise<void> {
-    this.clients.set(client.client_id, client);
+    const kv = await this.getKV();
+    const key = this.createKey(client.client_id);
+    await kv.set(key, client);
   }
 
   async get(clientId: string): Promise<OAuthClient | null> {
-    return this.clients.get(clientId) || null;
+    const kv = await this.getKV();
+    const key = this.createKey(clientId);
+    const result = await kv.get<OAuthClient>(key);
+    return result.value;
   }
 
   async delete(clientId: string): Promise<void> {
-    this.clients.delete(clientId);
+    const kv = await this.getKV();
+    const key = this.createKey(clientId);
+    await kv.delete(key);
   }
 
   async list(): Promise<OAuthClient[]> {
-    return Array.from(this.clients.values());
+    const kv = await this.getKV();
+    const prefix = this.createKey();
+    const entries = kv.list<OAuthClient>({ prefix });
+    
+    const clients: OAuthClient[] = [];
+    for await (const entry of entries) {
+      if (entry.value) {
+        clients.push(entry.value);
+      }
+    }
+    return clients;
   }
 
   /**
