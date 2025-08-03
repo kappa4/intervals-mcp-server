@@ -1,24 +1,24 @@
 # UCR KVキャッシュ実装 チェックリスト
 
-## 🔴 即対応が必要な項目
+## ✅ 完了済み項目
 
-### 1. Deno Deploy環境変数設定
-- [ ] https://dash.deno.com にアクセス
-- [ ] intervals-mcp-serverプロジェクトを選択
-- [ ] Settings → Environment Variablesで以下を設定：
-  - [ ] `ATHLETE_ID`: （Railwayと同じ値）
-  - [ ] `API_KEY`: （Railwayと同じ値）
-  - [ ] `JWT_SECRET_KEY`: （Railwayと同じ値、32文字以上）
-  - [ ] `ORIGIN`: https://intervals-mcp-server.deno.dev
-- [ ] 設定後、自動的に再デプロイされることを確認
+### 1. Deno Deploy環境変数設定 ✅
+- [x] https://dash.deno.com にアクセス
+- [x] intervals-mcp-serverプロジェクトを選択
+- [x] Settings → Environment Variablesで以下を設定：
+  - [x] `ATHLETE_ID`: i72555
+  - [x] `API_KEY`: （設定済み）
+  - [x] `JWT_SECRET_KEY`: （設定済み、32文字以上）
+  - [x] `ORIGIN`: https://kpnco-intervals-mcp-77.deno.dev
+- [x] 設定後、自動的に再デプロイされることを確認
 
-### 2. 動作確認
-- [ ] ヘルスチェック確認
+### 2. 動作確認 ✅
+- [x] ヘルスチェック確認（2025-08-03完了）
   ```bash
-  curl https://intervals-mcp-server.deno.dev/health
+  curl https://kpnco-intervals-mcp-77.deno.dev/health
   ```
-  - cache_enabled: true を確認
-  - kv_enabled: true を確認
+  - cache_enabled: true ✅
+  - kv_enabled: true ✅
 
 - [ ] Claude経由でUCRツール動作確認
   - [ ] get_ucr_assessment実行
