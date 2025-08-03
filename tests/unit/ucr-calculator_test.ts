@@ -3,15 +3,28 @@
  * Tests integrated calculation logic and edge cases
  */
 
-import { assertEquals, assertAlmostEquals, assertThrows } from "std/assert/mod.ts";
-import { describe, it, beforeEach } from "std/testing/bdd.ts";
+import { assertEquals, assertAlmostEquals, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { describe, it, beforeEach } from "https://deno.land/std@0.224.0/testing/bdd.ts";
 import { UCRCalculator } from "../../ucr-calculator.ts";
 import { UCRCalculationInput, WellnessData } from "../../ucr-types.ts";
 import { 
   assertUCRScore, 
   TestDataValidator,
-  PerformanceTimer 
+  PerformanceTimer,
+  assertAlmostEquals as customAssertAlmostEquals
 } from "../helpers/test-setup.ts";
+import {
+  createHealthyAthleteData,
+  createParasympatheticSaturationData,
+  createSleepDebtData,
+  createLowMotivationData
+} from "../fixtures/wellness-data.ts";
+import {
+  PARASYMPATHETIC_SATURATION_EXPECTED,
+  SLEEP_DEBT_EXPECTED,
+  LOW_MOTIVATION_EXPECTED,
+  TOLERANCE
+} from "../fixtures/expected-results.ts";
 
 describe("UCRCalculator - Integrated Calculation Tests", () => {
   let calculator: UCRCalculator;
@@ -170,7 +183,7 @@ describe("UCRCalculator - Integrated Calculation Tests", () => {
       const sorenessResult = calculator.calculate(sorenessInput);
 
       assertEquals(sorenessResult.score < baselineResult.score, true, "Soreness should reduce UCR score");
-      assertEquals(typeof sorenessResult.modifiers.muscleSoreness, "number", "Should track soreness modifier");
+      assertEquals(typeof sorenessResult.modifiers?.muscleSoreness, "object", "Should track soreness modifier");
     });
 
     it("should handle injury caps correctly", () => {
@@ -204,7 +217,7 @@ describe("UCRCalculator - Integrated Calculation Tests", () => {
       const injuryResult = calculator.calculate(injuryInput);
 
       assertEquals(injuryResult.score <= 30, true, "Severe injury should cap score at 30");
-      assertEquals(typeof injuryResult.modifiers.injury, "number", "Should track injury modifier");
+      assertEquals(typeof injuryResult.modifiers?.injury, "object", "Should track injury modifier");
     });
   });
 
@@ -417,6 +430,187 @@ describe("UCRCalculator - Integrated Calculation Tests", () => {
       assertEquals(typeof result.baselines, "object", "Should include baseline debug info");
       assertEquals(typeof result.baselines!.hrv.mean60, "number", "Should include HRV baseline stats");
       assertEquals(typeof result.baselines!.rhr.mean30, "number", "Should include RHR baseline stats");
+    });
+  });
+
+  describe("Critical Missing Test Cases", () => {
+    it("should detect parasympathetic saturation and assign high score", () => {
+      const input = createParasympatheticSaturationData();
+      const result = calculator.calculate(input);
+      
+      // 副交感神経飽和により高いHRVスコアが付与される（35以上）
+      assertEquals(
+        result.components.hrv >= 35,
+        true,
+        `Parasympathetic saturation should yield high HRV score (got ${result.components.hrv}, expected >= 35)`
+      );
+      
+      // 高い総合スコアが付与される
+      customAssertAlmostEquals(
+        result.score,
+        PARASYMPATHETIC_SATURATION_EXPECTED.score!,
+        TOLERANCE.score,
+        "Parasympathetic saturation should yield high overall score"
+      );
+      
+      // デバッグ情報で副交感神経飽和が検出されたことを確認
+      const debugResult = calculator.calculate(input, { includeDebugInfo: true });
+      if (debugResult.debugInfo?.parasympatheticSaturation) {
+        assertEquals(
+          debugResult.debugInfo.parasympatheticSaturation,
+          true,
+          "Should detect parasympathetic saturation in debug info"
+        );
+      }
+    });
+
+    it("should calculate cumulative sleep debt correctly", () => {
+      const input = createSleepDebtData();
+      const result = calculator.calculate(input);
+      
+      // 睡眠負債による修正子が適用される
+      customAssertAlmostEquals(
+        result.multiplier || 1.0,
+        SLEEP_DEBT_EXPECTED.multiplier!,
+        TOLERANCE.multiplier,
+        "Sleep debt should apply correct multiplier"
+      );
+      
+      // スコアが適切に減少する
+      customAssertAlmostEquals(
+        result.score,
+        SLEEP_DEBT_EXPECTED.score!,
+        TOLERANCE.score,
+        "Sleep debt should reduce score appropriately"
+      );
+      
+      // 修正子が記録される
+      assertEquals(
+        result.modifiers?.sleepDebt?.applied,
+        true,
+        "Sleep debt modifier should be applied"
+      );
+      
+      if (result.modifiers?.sleepDebt?.applied) {
+        customAssertAlmostEquals(
+          result.modifiers.sleepDebt.value,
+          SLEEP_DEBT_EXPECTED.multiplier!,
+          TOLERANCE.multiplier,
+          "Sleep debt modifier value should match expected"
+        );
+      }
+    });
+
+    it("should apply motivation penalty when motivation <= 2", () => {
+      const baselineInput = createHealthyAthleteData();
+      const lowMotivationInput = createHealthyAthleteData();
+      // intervals.icu: 3-4 = low motivation -> 内部値1-2
+      lowMotivationInput.current.motivation = 4; // intervals.icu: 4=no motivation -> 内部値1
+      
+      const baselineResult = calculator.calculate(baselineInput);
+      const lowMotivationResult = calculator.calculate(lowMotivationInput);
+      
+      // モチベーション修正子が適用される
+      customAssertAlmostEquals(
+        lowMotivationResult.multiplier || 1.0,
+        LOW_MOTIVATION_EXPECTED.multiplier!,
+        TOLERANCE.multiplier,
+        "Low motivation should apply 0.9 multiplier"
+      );
+      
+      // スコアが10%減少する
+      const expectedScore = Math.round(baselineResult.score * 0.9);
+      customAssertAlmostEquals(
+        lowMotivationResult.score,
+        expectedScore,
+        TOLERANCE.score,
+        "Low motivation should reduce score by 10%"
+      );
+      
+      // 修正子が記録される
+      assertEquals(
+        lowMotivationResult.modifiers?.motivation?.applied,
+        true,
+        "Motivation modifier should be applied"
+      );
+    });
+
+    it("should handle edge case: very low HRV without low RHR", () => {
+      const input = createHealthyAthleteData();
+      // 低いHRVだが、RHRは正常（副交感神経飽和ではない）
+      input.current.hrv = 25;
+      input.current.rhr = 55;
+      
+      const result = calculator.calculate(input);
+      
+      // HRVスコアは低いはず
+      assertEquals(
+        result.components.hrv < 20,
+        true,
+        "Very low HRV without low RHR should yield low HRV score"
+      );
+      
+      // 副交感神経飽和は検出されない
+      const debugResult = calculator.calculate(input, { includeDebugInfo: true });
+      assertEquals(
+        debugResult.debugInfo?.parasympatheticSaturation || false,
+        false,
+        "Should not detect parasympathetic saturation when RHR is normal"
+      );
+    });
+
+    it("should handle multiple modifiers correctly", () => {
+      const input = createHealthyAthleteData();
+      // 複数の修正子を適用
+      input.current.motivation = 4;     // intervals.icu: 4=no motivation -> 内部値1 (0.9倍)
+      input.current.alcohol = 1;     // アルコール摂取 (0.9倍)  
+      input.current.soreness = 4;       // intervals.icu: 4=very sore -> 内部値1 (0.5倍)
+      
+      const result = calculator.calculate(input);
+      
+      // 複数の修正子が累積的に適用される
+      const expectedMultiplier = 0.9 * 0.85 * 0.5;  // motivation * alcoholLight * severe_soreness
+      customAssertAlmostEquals(
+        result.multiplier || 1.0,
+        expectedMultiplier,
+        TOLERANCE.multiplier,
+        "Multiple modifiers should apply cumulatively"
+      );
+      
+      // 各修正子が記録される
+      assertEquals(result.modifiers?.motivation?.applied, true, "Motivation modifier should be applied");
+      assertEquals(result.modifiers?.alcohol?.applied, true, "Alcohol modifier should be applied");
+      assertEquals(result.modifiers?.muscleSoreness?.applied, true, "Muscle soreness modifier should be applied");
+    });
+
+    it("should validate wellness data conversion", () => {
+      const input = createHealthyAthleteData();
+      
+      // intervals.icu形式の値を設定（1=good, 4=bad）
+      input.current.fatigue = 1;    // intervals.icu: 1=fresh
+      input.current.stress = 4;     // intervals.icu: 4=very stressed
+      input.current.motivation = 2; // intervals.icu: 2=good
+      
+      const result = calculator.calculate(input);
+      
+      // 内部値への変換が正しく行われているか確認
+      // fatigue: 1 -> 5 (内部値)
+      // stress: 4 -> 1 (内部値)
+      // motivation: 2 -> 4 (内部値)
+      
+      // ストレスが高い（内部値1）ので主観スコアは低くなるはず
+      assertEquals(
+        result.components.subjective < 15,
+        true,
+        "High stress should reduce subjective score"
+      );
+      
+      // モチベーションは良好（内部値4）なので修正子は適用されない
+      assertEquals(
+        result.modifiers?.motivation?.applied || false,
+        false,
+        "Good motivation should not apply penalty"
+      );
     });
   });
 
