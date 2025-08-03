@@ -117,7 +117,7 @@ export class MCPHandler {
       return new Response(
         JSON.stringify({
           error: "mcp_error",
-          message: err.message || "Internal server error"
+          message: err instanceof Error ? err.message : "Internal server error"
         }),
         {
           status: 500,
@@ -313,8 +313,14 @@ export class MCPHandler {
         }
       ];
 
-    // UCRツールを追加
-    const allTools = [...intervalTools, ...UCR_TOOLS];
+    // UCRツールを追加 (MCPTool型に変換)
+    const ucrToolsAsMCPTools: MCPTool[] = UCR_TOOLS.map(tool => ({
+      name: tool.name,
+      description: tool.description || "No description available",
+      inputSchema: tool.inputSchema as MCPTool["inputSchema"]
+    }));
+    
+    const allTools = [...intervalTools, ...ucrToolsAsMCPTools];
     const response = { tools: allTools };
     
     debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);
@@ -366,7 +372,7 @@ export class MCPHandler {
       return {
         content: [{
           type: "text",
-          text: `Error: ${err.message}`
+          text: `Error: ${err instanceof Error ? err.message : String(err)}`
         }],
         isError: true
       };

@@ -11,6 +11,7 @@ import {
   parseDateRange,
 } from "./cache/cache-utils.ts";
 import { log } from "./logger.ts";
+import { getErrorMessage } from "./utils/error-utils.ts";
 import type {
   IntervalsAPIOptions,
   IntervalsWellness,
@@ -24,7 +25,7 @@ import type {
 export class CachedUCRIntervalsClient extends UCRIntervalsClient {
   private cache: WellnessCache;
   private cacheEnabled: boolean;
-  protected ucrCalculator: any; // Access parent's protected property
+  declare protected ucrCalculator: any; // Access parent's protected property
 
   constructor(options: IntervalsAPIOptions) {
     super(options);
@@ -37,7 +38,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
   /**
    * Override getWellnessDataForUCR with cache support
    */
-  async getWellnessDataForUCR(targetDate: string, lookbackDays: number = 60): Promise<WellnessData[]> {
+  override async getWellnessDataForUCR(targetDate: string, lookbackDays: number = 60): Promise<WellnessData[]> {
     // Generate cache key for the date range
     const startDate = new Date(targetDate);
     startDate.setDate(startDate.getDate() - lookbackDays);
@@ -45,7 +46,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
     const oldest = startDate.toISOString().split('T')[0];
     const newest = targetDate;
     const cacheKey = getWellnessCacheKey(
-      this.athlete_id, 
+      this.athleteId, 
       formatDateRange(oldest, newest)
     );
 
@@ -78,7 +79,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
       
       return data;
     } catch (error) {
-      log("ERROR", `Failed to fetch wellness data: ${error.message}`);
+      log("ERROR", `Failed to fetch wellness data: ${getErrorMessage(error)}`);
       
       // Try cache as fallback even if expired
       if (this.cacheEnabled) {
@@ -97,7 +98,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
   /**
    * Override batchCalculateUCR with optimized caching
    */
-  async batchCalculateUCR(
+  override async batchCalculateUCR(
     startDate: string,
     endDate: string,
     updateIntervals: boolean = false
@@ -111,7 +112,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
     lookbackStart.setDate(lookbackStart.getDate() - 60);
 
     const batchCacheKey = getWellnessCacheKey(
-      this.athlete_id,
+      this.athleteId,
       formatDateRange(lookbackStart.toISOString().split('T')[0], endDate)
     );
 
@@ -164,7 +165,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
           await this.updateWellnessWithUCR(dateStr, result);
           // Invalidate cache for this specific date since we updated it
           if (this.cacheEnabled) {
-            const dateCacheKey = getWellnessCacheKey(this.athlete_id, dateStr);
+            const dateCacheKey = getWellnessCacheKey(this.athleteId, dateStr);
             await this.cache.delete(dateCacheKey);
           }
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -172,7 +173,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
 
         log("DEBUG", `UCR calculated for ${dateStr}: score=${result.score}`);
       } catch (error) {
-        log("ERROR", `Failed to calculate UCR for ${dateStr}: ${error.message}`);
+        log("ERROR", `Failed to calculate UCR for ${dateStr}: ${getErrorMessage(error)}`);
       }
     }
 
@@ -183,7 +184,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
   /**
    * Override updateWellnessAndRecalculateUCR to invalidate cache
    */
-  async updateWellnessAndRecalculateUCR(
+  override async updateWellnessAndRecalculateUCR(
     date: string,
     updates: {
       fatigue?: number;
@@ -195,7 +196,7 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
   ): Promise<UCRWithTrend> {
     // Invalidate cache for this date before update
     if (this.cacheEnabled) {
-      const dateCacheKey = getWellnessCacheKey(this.athlete_id, date);
+      const dateCacheKey = getWellnessCacheKey(this.athleteId, date);
       await this.cache.delete(dateCacheKey);
       
       // Also invalidate any date ranges that include this date

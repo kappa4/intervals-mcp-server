@@ -38,7 +38,7 @@ export function createDiscoveryHandler(origin: string) {
       token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
     };
 
-    log("[OAuth] Returning discovery metadata:", JSON.stringify(metadata, null, 2));
+    log("DEBUG", "[OAuth] Returning discovery metadata:", JSON.stringify(metadata, null, 2));
 
     return new Response(JSON.stringify(metadata), {
       headers: { 

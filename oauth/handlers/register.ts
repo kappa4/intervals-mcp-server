@@ -16,8 +16,8 @@ import { log, info, warn, error } from "../../logger.ts";
 export function createRegistrationHandler(clientStorage: ClientStorage) {
   return async function handleRegistration(req: Request): Promise<Response> {
     info("[OAuth] Client registration request received");
-    log("[OAuth] Method:", req.method);
-    log("[OAuth] Content-Type:", req.headers.get("Content-Type"));
+    log("DEBUG", "[OAuth] Method:", req.method);
+    log("DEBUG", "[OAuth] Content-Type:", req.headers.get("Content-Type"));
     
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
@@ -26,7 +26,7 @@ export function createRegistrationHandler(clientStorage: ClientStorage) {
     };
 
     if (req.method === "OPTIONS") {
-      log("[OAuth] Responding to OPTIONS preflight");
+      log("DEBUG", "[OAuth] Responding to OPTIONS preflight");
       return new Response(null, { headers: corsHeaders });
     }
 

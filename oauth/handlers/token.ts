@@ -68,7 +68,7 @@ export function createTokenHandler(
         tokenRequest = await req.json();
       }
 
-      log("[OAuth] Token request:", JSON.stringify({ ...tokenRequest, client_secret: tokenRequest.client_secret ? "***" : undefined }, null, 2));
+      log("DEBUG", "[OAuth] Token request:", JSON.stringify({ ...tokenRequest, client_secret: tokenRequest.client_secret ? "***" : undefined }, null, 2));
 
       // Validate grant type
       if (!["authorization_code", "refresh_token"].includes(tokenRequest.grant_type)) {

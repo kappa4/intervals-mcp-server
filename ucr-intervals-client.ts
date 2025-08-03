@@ -5,6 +5,7 @@
 
 import { IntervalsAPIClient } from "./intervals-client.ts";
 import { log } from "./logger.ts";
+import { getErrorMessage } from "./utils/error-utils.ts";
 import { UCRCalculator } from "./ucr-calculator.ts";
 import type {
   IntervalsWellness,
@@ -127,8 +128,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
 
       return convertedData;
     } catch (error) {
-      log("ERROR", `Failed to fetch wellness data for UCR: ${error.message}`);
-      throw new Error(`UCR wellness data fetch failed: ${error.message}`);
+      log("ERROR", `Failed to fetch wellness data for UCR: ${getErrorMessage(error)}`);
+      throw new Error(`UCR wellness data fetch failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -165,8 +166,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
       
       return result;
     } catch (error) {
-      log("ERROR", `UCR assessment calculation failed for ${date}: ${error.message}`);
-      throw new Error(`UCR assessment failed: ${error.message}`);
+      log("ERROR", `UCR assessment calculation failed for ${date}: ${getErrorMessage(error)}`);
+      throw new Error(`UCR assessment failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -187,8 +188,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
       
       log("INFO", `Successfully updated intervals.icu wellness entry for ${date} with UCR data`);
     } catch (error) {
-      log("ERROR", `Failed to update intervals.icu wellness entry: ${error.message}`);
-      throw new Error(`intervals.icu update failed: ${error.message}`);
+      log("ERROR", `Failed to update intervals.icu wellness entry: ${getErrorMessage(error)}`);
+      throw new Error(`intervals.icu update failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -225,8 +226,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
       
       return result;
     } catch (error) {
-      log("ERROR", `Failed to update wellness and recalculate UCR: ${error.message}`);
-      throw new Error(`Wellness update and UCR recalculation failed: ${error.message}`);
+      log("ERROR", `Failed to update wellness and recalculate UCR: ${getErrorMessage(error)}`);
+      throw new Error(`Wellness update and UCR recalculation failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -274,8 +275,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
         recommendations
       };
     } catch (error) {
-      log("ERROR", `Failed to check UCR custom fields: ${error.message}`);
-      throw new Error(`Custom fields check failed: ${error.message}`);
+      log("ERROR", `Failed to check UCR custom fields: ${getErrorMessage(error)}`);
+      throw new Error(`Custom fields check failed: ${getErrorMessage(error)}`);
     }
   }
 
@@ -330,7 +331,7 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
 
           log("DEBUG", `UCR calculated for ${dateStr}: score=${result.score}`);
         } catch (error) {
-          log("ERROR", `Failed to calculate UCR for ${dateStr}: ${error.message}`);
+          log("ERROR", `Failed to calculate UCR for ${dateStr}: ${getErrorMessage(error)}`);
           // 個別の失敗は全体を止めない
         }
       }
@@ -338,8 +339,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
       log("INFO", `Batch UCR calculation completed: ${results.size} entries processed`);
       return results;
     } catch (error) {
-      log("ERROR", `Batch UCR calculation failed: ${error.message}`);
-      throw new Error(`Batch UCR calculation failed: ${error.message}`);
+      log("ERROR", `Batch UCR calculation failed: ${getErrorMessage(error)}`);
+      throw new Error(`Batch UCR calculation failed: ${getErrorMessage(error)}`);
     }
   }
 }

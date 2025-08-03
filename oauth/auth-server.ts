@@ -66,7 +66,7 @@ export class OAuthServer {
    * Route OAuth requests to appropriate handlers
    */
   async handleRequest(req: Request, path: string): Promise<Response | null> {
-    log(`[OAuth] Handling request: ${req.method} ${path}`);
+    log("DEBUG", `[OAuth] Handling request: ${req.method} ${path}`);
 
     // OAuth discovery endpoints
     if (path === "/.well-known/oauth-authorization-server" || 
@@ -104,7 +104,7 @@ export class OAuthServer {
       this.codeStorage.cleanupExpired(),
       this.tokenStorage.cleanupExpired(),
     ]);
-    log("[OAuth] Cleanup completed - expired tokens and codes removed");
+    log("INFO", "[OAuth] Cleanup completed - expired tokens and codes removed");
   }
 
   /**
@@ -157,10 +157,10 @@ export class OAuthServer {
           await this.clientStorage.store(claudeClient);
           info("[OAuth] Claude Web client registered on startup:", claudeClient.client_id);
         } else {
-          log("[OAuth] Claude Web client already registered:", claudeClient.client_id);
+          log("DEBUG", "[OAuth] Claude Web client already registered:", claudeClient.client_id);
         }
       } catch (error) {
-        log("[OAuth] Error registering Claude Web client:", error);
+        log("ERROR", "[OAuth] Error registering Claude Web client:", error);
       }
     }
   }

@@ -58,7 +58,7 @@ export function createAuthorizationHandler(
         scope: params.get("scope") || undefined,
       };
 
-      log("[OAuth] Authorization request:", JSON.stringify(authRequest, null, 2));
+      log("DEBUG", "[OAuth] Authorization request:", JSON.stringify(authRequest, null, 2));
 
       // Validate response_type
       if (authRequest.response_type !== "code") {
@@ -78,7 +78,7 @@ export function createAuthorizationHandler(
         
         // Log all registered clients for debugging
         const allClients = await clientStorage.list();
-        log("[OAuth] Registered clients:", allClients.map(c => ({ id: c.client_id, name: c.client_name })));
+        log("DEBUG", "[OAuth] Registered clients:", allClients.map(c => ({ id: c.client_id, name: c.client_name })));
         
         const errorParams = new URLSearchParams({
           error: "invalid_client", 

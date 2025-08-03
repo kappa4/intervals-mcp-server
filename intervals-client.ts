@@ -4,6 +4,7 @@
  */
 
 import { log } from "./logger.ts";
+import { getErrorMessage } from "./utils/error-utils.ts";
 import type {
   IntervalsActivity,
   IntervalsWellness,
@@ -19,7 +20,7 @@ import type {
 } from "./intervals-types.ts";
 
 export class IntervalsAPIClient {
-  private athleteId: string;
+  protected athleteId: string;
   private apiKey: string;
   private baseUrl: string;
 
@@ -84,7 +85,7 @@ export class IntervalsAPIClient {
       
       return data as T;
     } catch (error) {
-      log("ERROR", `Request failed: ${error.message}`);
+      log("ERROR", `Request failed: ${getErrorMessage(error)}`);
       throw error;
     }
   }
@@ -118,7 +119,7 @@ export class IntervalsAPIClient {
       
       return data[0];
     } catch (error) {
-      if (error.message.includes('404')) {
+      if (getErrorMessage(error).includes('404')) {
         throw new Error(`Activity ${activityId} not found. Please verify the activity ID from get_activities results.`);
       }
       throw error;

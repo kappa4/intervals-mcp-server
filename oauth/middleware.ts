@@ -15,19 +15,19 @@ export interface AuthContext {
 export function createAuthMiddleware(tokenStorage: TokenStorage) {
   return async function authenticate(req: Request): Promise<AuthContext> {
     const authHeader = req.headers.get("Authorization");
-    log("[Auth] Authorization header:", authHeader ? "Bearer ***" : "None");
+    log("DEBUG", "[Auth] Authorization header:", authHeader ? "Bearer ***" : "None");
     
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      log("[Auth] No Bearer token found");
+      log("DEBUG", "[Auth] No Bearer token found");
       return { authenticated: false };
     }
 
     const token = authHeader.substring(7); // Remove "Bearer " prefix
-    log("[Auth] Extracted token (first 20 chars):", token.substring(0, 20) + "...");
+    log("DEBUG", "[Auth] Extracted token (first 20 chars):", token.substring(0, 20) + "...");
     
     // Validate token
     const accessToken = await tokenStorage.getAccessToken(token);
-    log("[Auth] Token lookup result:", accessToken ? "Found" : "Not found");
+    log("DEBUG", "[Auth] Token lookup result:", accessToken ? "Found" : "Not found");
     
     if (!accessToken) {
       warn("[Auth] Token validation failed - token not found in storage");

@@ -6,6 +6,7 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { CachedUCRIntervalsClient } from "./ucr-intervals-client-cached.ts";
 import { log } from "./logger.ts";
+import { getErrorMessage } from "./utils/error-utils.ts";
 import type { IntervalsAPIOptions } from "./intervals-types.ts";
 
 // UCR MCPツール定義
@@ -162,10 +163,10 @@ export class UCRToolHandler {
           throw new Error(`Unknown UCR tool: ${toolName}`);
       }
     } catch (error) {
-      log("ERROR", `UCR tool ${toolName} failed: ${error.message}`);
+      log("ERROR", `UCR tool ${toolName} failed: ${getErrorMessage(error)}`);
       return {
         success: false,
-        error: error.message,
+        error: getErrorMessage(error),
         tool: toolName
       };
     }
