@@ -136,6 +136,9 @@ async function handler(req: Request): Promise<Response> {
             name: athlete.name,
             activities: athlete.activity_count || 0
           },
+          kv_enabled: true,
+          cache_enabled: Deno.env.get("CACHE_ENABLED") !== "false",
+          athlete_id: Deno.env.get("ATHLETE_ID"),
           endpoints: {
             mcp: ["GET /", "POST /", "DELETE /"],
             info: ["GET /health", "GET /info"],

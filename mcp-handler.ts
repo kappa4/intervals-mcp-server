@@ -64,15 +64,6 @@ export class MCPHandler {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Authentication check for non-initialization endpoints
-    const authContext = await this.oauthServer.authenticate(req);
-    if (!authContext.authenticated) {
-      warn("MCP request rejected - authentication required");
-      return createUnauthorizedResponse("Authentication required for MCP access");
-    }
-
-    debug(`MCP request authenticated for client: ${authContext.client_id}`);
-
     try {
       let mcpRequest: MCPRequest;
 
@@ -90,6 +81,22 @@ export class MCPHandler {
         };
       } else {
         throw new Error(`Unsupported HTTP method: ${req.method}`);
+      }
+
+      // Check if authentication is required for this method
+      const authNotRequiredMethods = ["initialize", "initialized", "notifications/initialized"];
+      const requiresAuth = !authNotRequiredMethods.includes(mcpRequest.method);
+
+      if (requiresAuth) {
+        // Authentication check for protected endpoints
+        const authContext = await this.oauthServer.authenticate(req);
+        if (!authContext.authenticated) {
+          warn(`MCP request rejected - authentication required for method: ${mcpRequest.method}`);
+          return createUnauthorizedResponse("Authentication required for MCP access");
+        }
+        debug(`MCP request authenticated for client: ${authContext.client_id}`);
+      } else {
+        debug(`Bypassing authentication for method: ${mcpRequest.method}`);
       }
 
       const mcpResponse = await this.handleMCPRequest(mcpRequest);
