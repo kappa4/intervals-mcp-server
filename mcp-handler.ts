@@ -5,6 +5,8 @@
 
 import { log, debug, warn, error } from "./logger.ts";
 import { IntervalsAPIClient } from "./intervals-client.ts";
+import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
+import { UCRToolHandler, UCR_TOOLS } from "./ucr-tools.ts";
 import { OAuthServer } from "./oauth/auth-server.ts";
 import { createUnauthorizedResponse } from "./oauth/middleware.ts";
 import type {
@@ -27,12 +29,21 @@ export class MCPHandler {
   private initialized = false;
   private clientInfo?: { name: string; version: string };
   private intervalsClient: IntervalsAPIClient;
+  private ucrToolHandler: UCRToolHandler;
   private oauthServer: OAuthServer;
 
   constructor(intervalsClient: IntervalsAPIClient, oauthServer: OAuthServer) {
     this.intervalsClient = intervalsClient;
     this.oauthServer = oauthServer;
-    debug("MCP Handler initialized with OAuth authentication");
+    
+    // UCRツールハンドラーを初期化
+    const apiOptions = {
+      athlete_id: Deno.env.get("ATHLETE_ID")!,
+      api_key: Deno.env.get("API_KEY")!,
+    };
+    this.ucrToolHandler = new UCRToolHandler(apiOptions);
+    
+    debug("MCP Handler initialized with OAuth authentication and UCR tools");
   }
 
   async handleRequest(req: Request): Promise<Response> {
@@ -183,8 +194,7 @@ export class MCPHandler {
   }
 
   private async handleListTools(): Promise<ListToolsResponse> {
-    const response = {
-      tools: [
+    const intervalTools = [
         {
           name: "get_activities",
           description: "Get recent activities from Intervals.icu. If no date range is specified, returns activities from the last 30 days.",
@@ -301,10 +311,13 @@ export class MCPHandler {
             properties: {}
           }
         }
-      ]
-    };
+      ];
+
+    // UCRツールを追加
+    const allTools = [...intervalTools, ...UCR_TOOLS];
+    const response = { tools: allTools };
     
-    debug("Returning tools list with", response.tools.length, "tools");
+    debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);
     return response;
   }
 
@@ -314,24 +327,32 @@ export class MCPHandler {
     try {
       let result: string;
 
-      switch (name) {
-        case "get_activities":
-          result = await this.getActivities(args);
-          break;
-        case "get_activity":
-          result = await this.getActivity(args);
-          break;
-        case "get_wellness":
-          result = await this.getWellness(args);
-          break;
-        case "update_wellness":
-          result = await this.updateWellness(args);
-          break;
-        case "get_athlete_info":
-          result = await this.getAthleteInfo();
-          break;
-        default:
-          throw new Error(`Unknown tool: ${name}`);
+      // UCRツールの処理
+      const ucrToolNames = UCR_TOOLS.map(tool => tool.name);
+      if (ucrToolNames.includes(name)) {
+        const ucrResult = await this.ucrToolHandler.handleTool(name, args);
+        result = JSON.stringify(ucrResult, null, 2);
+      } else {
+        // 既存のIntervals.icuツールの処理
+        switch (name) {
+          case "get_activities":
+            result = await this.getActivities(args);
+            break;
+          case "get_activity":
+            result = await this.getActivity(args);
+            break;
+          case "get_wellness":
+            result = await this.getWellness(args);
+            break;
+          case "update_wellness":
+            result = await this.updateWellness(args);
+            break;
+          case "get_athlete_info":
+            result = await this.getAthleteInfo();
+            break;
+          default:
+            throw new Error(`Unknown tool: ${name}`);
+        }
       }
 
       return {

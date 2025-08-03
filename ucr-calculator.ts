@@ -1,0 +1,800 @@
+/**
+ * UCR (Unified Continuous Readiness) Calculator
+ * calcReadinessのGAS実装からの移植
+ */
+
+import {
+  WellnessData,
+  UCRCalculationInput,
+  UCRResult,
+  UCRWithTrend,
+  UCRComponents,
+  UCRModifiers,
+  BaselineData,
+  TrendResult,
+  TrainingRecommendation,
+  UCRConfig,
+  UCRValidationError,
+  UCRCalculationOptions,
+  WellnessConversionMap,
+  DefaultWellnessValues,
+  IntervalsIcuWellnessUpdate
+} from './ucr-types.ts';
+
+// ========================================
+// デフォルト設定
+// ========================================
+
+const DEFAULT_UCR_CONFIG: UCRConfig = {
+  hrv: {
+    baselineDays: 60,
+    rollingDays: 7,
+    sensitivityFactor: 0.75,
+    sigmoid: {
+      k: 1.0,
+      c: -0.5,
+      saturationZ: 1.5
+    }
+  },
+  rhr: {
+    baselineDays: 30,
+    thresholdSd: 1.0,
+    linear: {
+      baseline: 14,
+      slope: 6
+    }
+  },
+  sleep: {
+    minHours: 5,
+    targetHours: 5.5,
+    debtDays: 3
+  },
+  scoreWeights: {
+    hrv: 40,
+    rhr: 20,
+    sleep: 20,
+    subjective: 20
+  },
+  penalties: {
+    alcoholLight: 0.85,
+    alcoholHeavy: 0.6,
+    muscleSorenessSevere: 0.5,
+    musclesorenessModerate: 0.75,
+    sleepDebt: -15,
+    injuryModerate: -15,
+    injuryLight: -5,
+    motivationLow: -5
+  },
+  trend: {
+    momentum: {
+      lookbackDays: 7,
+      thresholds: {
+        strongPositive: 10,
+        positive: 2,
+        negative: -2,
+        strongNegative: -10
+      }
+    },
+    volatility: {
+      period: 14,
+      emaAlpha: 2 / (14 + 1),
+      bollinger: {
+        period: 20,
+        stdDevMultiplier: 1.5
+      }
+    },
+    minDataPoints: 15
+  }
+};
+
+// intervals.icu wellness scale conversion (1-4 → 1-5)
+// intervals.icu: 1=good, 4=bad -> internal: 1=bad, 5=good
+const WELLNESS_CONVERSION: WellnessConversionMap = {
+  'fatigue': { 1: 5, 2: 4, 3: 2, 4: 1 },      // 疲労度: 1=fresh -> 5, 4=very tired -> 1
+  'soreness': { 1: 5, 2: 4, 3: 3, 4: 1 },     // 筋肉痛: 1=no soreness -> 5, 3=moderate -> 3, 4=very sore -> 1
+  'stress': { 1: 5, 2: 4, 3: 2, 4: 1 },       // ストレス: 1=relaxed -> 5, 4=very stressed -> 1
+  'motivation': { 1: 5, 2: 4, 3: 3, 4: 1 },   // モチベーション: 1=very motivated -> 5, 3=ok -> 3, 4=no motivation -> 1
+  'injury': { 1: 5, 2: 4, 3: 3, 4: 1 }        // ケガ: 1=no injury -> 5, 3=slight -> 3, 4=severe injury -> 1
+};
+
+const DEFAULT_WELLNESS_VALUES: DefaultWellnessValues = {
+  'fatigue': 4,      // やや良好（3→4）
+  'soreness': 5,     // 痛みなし
+  'stress': 4,       // やや良好（3→4）
+  'motivation': 4,   // やや高いモチベーション
+  'injury': 5        // ケガなし
+};
+
+// トレーニング推奨ゾーン
+const TRAINING_ZONES = {
+  PRIME: {
+    threshold: 85,
+    name: 'プライム' as const,
+    color: '#4CAF50',
+    description: '身体は最高のパフォーマンスに備えている',
+    action: '高強度トレーニング',
+    approach: '計画通りの高強度、あるいはそれ以上',
+    examples: 'VO2 Maxインターバル、閾値走、高重量筋力トレーニング'
+  },
+  MODERATE: {
+    threshold: 65,
+    name: '中程度' as const,
+    color: '#FFA500',
+    description: '生産的なトレーニングは可能だが、最高のストレスには不適',
+    action: '低強度トレーニング',
+    approach: '高強度は可能だが、注意深い自己調整が必須',
+    examples: 'ゾーン2持久走、技術練習、中程度ボリュームの筋力トレーニング'
+  },
+  LOW: {
+    threshold: 0,
+    name: '低い' as const,
+    color: '#F44336',
+    description: '回復が必要',
+    action: '休息または積極的回復',
+    approach: '回復の最大化が最優先',
+    examples: '完全休息、軽い散歩、ストレッチ、モビリティワーク'
+  }
+};
+
+// ========================================
+// UCRCalculator クラス
+// ========================================
+
+export class UCRCalculator {
+  private config: UCRConfig;
+
+  constructor(config?: Partial<UCRConfig>) {
+    this.config = { ...DEFAULT_UCR_CONFIG, ...config };
+  }
+
+  /**
+   * UCRスコアを計算する
+   */
+  calculate(input: UCRCalculationInput, options?: UCRCalculationOptions): UCRResult {
+    const validationErrors = this.validateInput(input);
+    if (validationErrors.length > 0) {
+      throw new Error(`Validation failed: ${validationErrors.map(e => e.message).join(', ')}`);
+    }
+
+    const { current, historical } = input;
+    
+    // ベースライン計算
+    const baselines = this.calculateBaselines(historical, current.date, current);
+    
+    // 主観的データの変換
+    const subjectiveData = this.convertSubjectiveData(current);
+    
+    // 各コンポーネントのスコア計算
+    const components: UCRComponents = {
+      hrv: this.calculateHRVScore(current.hrv!, current.rhr!, baselines.hrv, baselines.rhr),
+      rhr: this.calculateRHRScore(current.rhr!, baselines.rhr),
+      sleep: this.calculateSleepScore(current),
+      subjective: this.calculateSubjectiveScore(subjectiveData)
+    };
+    
+    // ベーススコア
+    const baseScore = Object.values(components).reduce((sum: number, score: number) => sum + score, 0);
+    
+    // 修正因子の適用
+    const { finalScore, modifiers } = this.applyModifiers(baseScore, subjectiveData, historical);
+    
+    // 推奨事項
+    const recommendation = this.getTrainingRecommendation(finalScore);
+    
+    return {
+      score: Math.round(finalScore),
+      baseScore: Math.round(baseScore),
+      components,
+      modifiers,
+      recommendation,
+      baselines: options?.includeDebugInfo ? baselines : undefined
+    };
+  }
+
+  /**
+   * トレンド分析付きのUCR計算
+   */
+  calculateWithTrends(input: UCRCalculationInput, options?: UCRCalculationOptions): UCRWithTrend {
+    const baseResult = this.calculate(input, options);
+    
+    if (options?.skipTrendAnalysis) {
+      return baseResult;
+    }
+
+    const trend = this.calculateTrends(input.historical, input.current.date);
+    
+    return {
+      ...baseResult,
+      trend
+    };
+  }
+
+  /**
+   * intervals.icu用のウェルネスデータ更新オブジェクトを生成
+   */
+  generateIntervalsIcuUpdate(result: UCRWithTrend): IntervalsIcuWellnessUpdate {
+    const update: IntervalsIcuWellnessUpdate = {
+      readiness: result.score
+    };
+
+    if (result.trend) {
+      update.UCRMomentum = Math.round(result.trend.momentum * 10) / 10;
+      update.UCRVolatility = Math.round(result.trend.volatility * 100) / 100;
+      update.UCRVolatilityLevel = result.trend.volatilityLevel;
+      update.UCRVolatilityBandPosition = Math.round(result.trend.volatilityBandPosition * 100) / 100;
+      update.UCRTrendState = result.trend.trendStateCode;
+      update.UCRTrendInterpretation = result.trend.interpretation;
+    }
+
+    return update;
+  }
+
+  // ========================================
+  // Private メソッド群
+  // ========================================
+
+  private validateInput(input: UCRCalculationInput): UCRValidationError[] {
+    const errors: UCRValidationError[] = [];
+    
+    if (!input.current.date) {
+      errors.push({ field: 'current.date', message: 'Date is required' });
+    }
+    
+    if (!input.current.hrv || input.current.hrv <= 0) {
+      errors.push({ field: 'current.hrv', message: 'Valid HRV value is required', value: input.current.hrv });
+    }
+    
+    if (!input.current.rhr || input.current.rhr <= 0) {
+      errors.push({ field: 'current.rhr', message: 'Valid RHR value is required', value: input.current.rhr });
+    }
+    
+    return errors;
+  }
+
+  private calculateBaselines(historicalData: WellnessData[], currentDate: string, currentData: WellnessData): BaselineData {
+    const now = new Date(currentDate);
+    const minHrvDays = 7;
+    const minRhrDays = 7;
+
+    // HRV データ（ln変換）- 60日間ベースライン（現在の日は含めない）
+    const hrvData60 = historicalData
+      .filter(d => {
+        const date = new Date(d.date);
+        const daysDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+        return daysDiff > 0 && daysDiff <= this.config.hrv.baselineDays && d.hrv && d.hrv > 0;
+      })
+      .map(d => Math.log(d.hrv!));
+
+    // 7日間ローリング平均用データ（現在の日を含む過去7日間）
+    const recentData = [...historicalData];
+    if (currentData.hrv && currentData.hrv > 0) {
+      recentData.push(currentData);
+    }
+    
+    const hrvData7 = recentData
+      .filter(d => {
+        const date = new Date(d.date);
+        const daysDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+        return daysDiff >= 0 && daysDiff < this.config.hrv.rollingDays && d.hrv && d.hrv > 0;
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, this.config.hrv.rollingDays)
+      .map(d => Math.log(d.hrv!));
+
+    // RHR データ
+    const rhrData30 = historicalData
+      .filter(d => {
+        const date = new Date(d.date);
+        const daysDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+        return daysDiff >= 0 && daysDiff <= this.config.rhr.baselineDays && d.rhr && d.rhr > 0;
+      })
+      .map(d => d.rhr!);
+
+    const hrvValid = hrvData60.length >= minHrvDays;
+    const rhrValid = rhrData30.length >= minRhrDays;
+
+    return {
+      hrv: {
+        mean60: hrvValid ? this.calculateMean(hrvData60) : (hrvData60.length > 0 ? this.calculateMean(hrvData60) : 0),
+        sd60: hrvValid ? this.calculateStdDev(hrvData60) : (hrvData60.length > 0 ? this.calculateStdDev(hrvData60) : 0.1),
+        mean7: hrvData7.length > 0 ? this.calculateMean(hrvData7) : 0,
+        dataCount: hrvData60.length,
+        isValid: hrvValid
+      },
+      rhr: {
+        mean30: rhrValid ? this.calculateMean(rhrData30) : (rhrData30.length > 0 ? this.calculateMean(rhrData30) : 50),
+        sd30: rhrValid ? this.calculateStdDev(rhrData30) : (rhrData30.length > 0 ? this.calculateStdDev(rhrData30) : 5),
+        dataCount: rhrData30.length,
+        isValid: rhrValid
+      }
+    };
+  }
+
+  private calculateHRVScore(currentHRV: number, currentRHR: number, hrvBaseline: BaselineData['hrv'], rhrBaseline: BaselineData['rhr']): number {
+    if (!hrvBaseline.isValid || hrvBaseline.mean60 === 0 || hrvBaseline.sd60 === 0) {
+      return this.config.scoreWeights.hrv * 0.625; // デフォルト中間値
+    }
+
+    const lnCurrentHRV = Math.log(currentHRV);
+
+    // 副交感神経飽和チェック
+    if (lnCurrentHRV < (hrvBaseline.mean60 - this.config.hrv.sensitivityFactor * hrvBaseline.sd60) &&
+        currentRHR < rhrBaseline.mean30) {
+      // 副交感神経飽和：高いZスコアを設定
+      const zScore = this.config.hrv.sigmoid.saturationZ;
+      const score = this.config.scoreWeights.hrv / (1 + Math.exp(-this.config.hrv.sigmoid.k * (zScore - this.config.hrv.sigmoid.c)));
+      return score;
+    }
+
+    // 通常評価：7日間平均のZスコア
+    const zScore = (hrvBaseline.mean7 - hrvBaseline.mean60) / (hrvBaseline.sd60 || 0.1);
+    const score = this.config.scoreWeights.hrv / (1 + Math.exp(-this.config.hrv.sigmoid.k * (zScore - this.config.hrv.sigmoid.c)));
+    
+    return score;
+  }
+
+  private calculateRHRScore(currentRHR: number, rhrBaseline: BaselineData['rhr']): number {
+    // 反転Zスコア（RHRは低いほど良い）
+    const zScore = -(currentRHR - rhrBaseline.mean30) / (rhrBaseline.sd30 || 5);
+    
+    // 線形関数マッピング
+    const score = this.config.rhr.linear.baseline + (zScore * this.config.rhr.linear.slope);
+    
+    // 0-20の範囲にクリップ
+    return Math.max(0, Math.min(this.config.scoreWeights.rhr, score));
+  }
+
+  private calculateSleepScore(current: WellnessData): number {
+    const sleepScore = current.sleepScore || 0;
+    const sleepHours = current.sleepHours || 0;
+
+    // 最小睡眠時間未満は0点
+    if (sleepHours < this.config.sleep.minHours && sleepHours > 0) {
+      return 0;
+    }
+
+    // データなしはデフォルト値
+    if (sleepScore === 0 && sleepHours === 0) {
+      return this.config.scoreWeights.sleep * 0.5;
+    }
+
+    // Garmin睡眠スコアの線形スケーリング
+    return (sleepScore / 100) * this.config.scoreWeights.sleep;
+  }
+
+  private calculateSubjectiveScore(subjectiveData: any): number {
+    const scores: number[] = [];
+    
+    if (subjectiveData.fatigue !== null && subjectiveData.fatigue !== undefined) {
+      scores.push(subjectiveData.fatigue);
+    }
+    if (subjectiveData.stress !== null && subjectiveData.stress !== undefined) {
+      scores.push(subjectiveData.stress);
+    }
+
+    if (scores.length === 0) {
+      return this.config.scoreWeights.subjective * 0.5;
+    }
+
+    const averageScore = this.calculateMean(scores);
+    return ((averageScore - 1) / 4) * this.config.scoreWeights.subjective;
+  }
+
+  private convertSubjectiveData(current: WellnessData): any {
+    return {
+      fatigue: this.convertWellnessScale(current.fatigue, 'fatigue'),
+      soreness: this.convertWellnessScale(current.soreness, 'soreness'),
+      stress: this.convertWellnessScale(current.stress, 'stress'),
+      motivation: this.convertWellnessScale(current.motivation, 'motivation'),
+      injury: this.convertWellnessScale(current.injury, 'injury'),
+      alcohol: current.alcohol || 0
+    };
+  }
+
+  private convertWellnessScale(icuValue: number | undefined, fieldType: string): number {
+    if (icuValue === undefined || icuValue === null) {
+      // データがない場合は、フィールドタイプに応じて適切なデフォルト値を返す
+      return DEFAULT_WELLNESS_VALUES[fieldType] || 3;
+    }
+    
+    // 変換マップを使用して変換
+    const conversionMap = WELLNESS_CONVERSION[fieldType];
+    return conversionMap ? conversionMap[icuValue] || 3 : 3;
+  }
+
+  private applyModifiers(baseScore: number, subjectiveData: any, historicalData: WellnessData[]): { finalScore: number; modifiers: UCRModifiers } {
+    let finalScore = baseScore;
+    
+    const modifiers: UCRModifiers = {
+      alcohol: subjectiveData.alcohol,
+      muscleSoreness: subjectiveData.soreness,
+      injury: subjectiveData.injury,
+      motivation: subjectiveData.motivation,
+      sleepDebt: this.calculateSleepDebt(historicalData)
+    };
+
+    // 筋肉痛修正
+    if (subjectiveData.soreness === 1) {
+      finalScore *= this.config.penalties.muscleSorenessSevere;
+    } else if (subjectiveData.soreness === 2) {
+      finalScore *= this.config.penalties.musclesorenessModerate;
+    } else if (subjectiveData.soreness === 3) {
+      finalScore *= 0.9;
+    }
+
+    // アルコール修正
+    if (subjectiveData.alcohol === 1) {
+      finalScore *= this.config.penalties.alcoholLight;
+    } else if (subjectiveData.alcohol === 2) {
+      finalScore *= this.config.penalties.alcoholHeavy;
+    }
+
+    // 睡眠負債修正
+    if (modifiers.sleepDebt > 0) {
+      const sleepDebtMultiplier = Math.max(0.7, 1 - 0.05 * modifiers.sleepDebt);
+      finalScore *= sleepDebtMultiplier;
+    }
+
+    // モチベーション修正
+    if (subjectiveData.motivation <= 2) {
+      finalScore *= 0.9;
+    }
+
+    // ケガのハードキャップ
+    if (subjectiveData.injury === 1) {
+      finalScore = Math.min(finalScore, 30);
+    } else if (subjectiveData.injury === 2) {
+      finalScore = Math.min(finalScore, 50);
+    } else if (subjectiveData.injury === 3) {
+      finalScore = Math.min(finalScore, 70);
+    }
+
+    return {
+      finalScore: Math.max(0, Math.min(100, finalScore)),
+      modifiers
+    };
+  }
+
+  private calculateSleepDebt(historicalData: WellnessData[]): number {
+    const now = new Date();
+    const recentDays = historicalData
+      .filter(d => {
+        const date = new Date(d.date);
+        const daysDiff = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+        return daysDiff <= this.config.sleep.debtDays;
+      })
+      .slice(-this.config.sleep.debtDays);
+
+    let totalDebt = 0;
+    recentDays.forEach(d => {
+      const sleepHours = d.sleepHours || 0;
+      const debt = Math.max(0, this.config.sleep.targetHours - sleepHours);
+      totalDebt += debt;
+    });
+
+    return totalDebt;
+  }
+
+  private getTrainingRecommendation(score: number): TrainingRecommendation {
+    if (score >= TRAINING_ZONES.PRIME.threshold) {
+      return TRAINING_ZONES.PRIME;
+    } else if (score >= TRAINING_ZONES.MODERATE.threshold) {
+      return TRAINING_ZONES.MODERATE;
+    } else {
+      return TRAINING_ZONES.LOW;
+    }
+  }
+
+  private calculateTrends(historicalData: WellnessData[], targetDate: string): TrendResult {
+    try {
+      // UCRスコア付きの時系列データを準備
+      const timeSeriesData = this.prepareTimeSeriesData(historicalData, targetDate);
+      
+      if (!timeSeriesData || timeSeriesData.length < this.config.trend.minDataPoints) {
+        return {
+          momentum: 0,
+          volatility: 0,
+          volatilityLevel: 'MODERATE',
+          volatilityBandPosition: 0,
+          trendState: '均衡状態',
+          trendStateCode: 5,
+          interpretation: `データ不足：トレンド分析には最低${this.config.trend.minDataPoints}日分のデータが必要です`
+        };
+      }
+
+      // モメンタム計算
+      const momentumResult = this.calculateMomentum(timeSeriesData, targetDate);
+      
+      // ボラティリティ計算
+      const volatilityResult = this.calculateVolatility(timeSeriesData);
+      
+      // 対象日のUCRスコアを取得
+      const currentEntry = historicalData.find(d => d.date === targetDate);
+      if (!currentEntry) {
+        throw new Error(`Target date ${targetDate} not found in historical data`);
+      }
+
+      // 現在のUCRスコアを計算（簡略版）
+      const currentUCR = this.calculateCurrentUCRScore(currentEntry, historicalData);
+      
+      // トレンドステート判定
+      const trendStateKey = this.determineTrendStateKey(currentUCR, momentumResult?.category || 'NEUTRAL');
+      const trendState = this.getTrendStateName(trendStateKey);
+      const trendStateCode = this.getTrendStateCode(trendStateKey);
+      
+      // 解釈生成
+      const interpretation = this.generateInterpretation(
+        currentUCR,
+        momentumResult?.value || 0,
+        volatilityResult?.value || 0,
+        volatilityResult?.level || 'MODERATE',
+        trendState
+      );
+
+      return {
+        momentum: momentumResult?.value || 0,
+        volatility: volatilityResult?.value || 0,
+        volatilityLevel: volatilityResult?.level || 'MODERATE',
+        volatilityBandPosition: volatilityResult?.bandPosition || 0,
+        trendState,
+        trendStateCode,
+        interpretation
+      };
+    } catch (error) {
+      console.error("ERROR", `Trend calculation failed: ${(error as Error).message}`);
+      return {
+        momentum: 0,
+        volatility: 0,
+        volatilityLevel: 'MODERATE',
+        volatilityBandPosition: 0,
+        trendState: '均衡状態',
+        trendStateCode: 5,
+        interpretation: `トレンド計算エラー: ${(error as Error).message}`
+      };
+    }
+  }
+
+  private prepareTimeSeriesData(historicalData: WellnessData[], targetDate: string): Array<{date: string, score: number}> | null {
+    // UCRスコアを持つデータのみを抽出・ソート
+    const validEntries = historicalData
+      .filter(d => d.date <= targetDate && this.hasValidUCRData(d))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (validEntries.length === 0) return null;
+
+    // 各エントリのUCRスコアを計算
+    const timeSeriesData: Array<{date: string, score: number}> = [];
+    
+    for (const entry of validEntries) {
+      try {
+        const historicalForEntry = historicalData.filter(d => d.date <= entry.date);
+        const ucrScore = this.calculateCurrentUCRScore(entry, historicalForEntry);
+        timeSeriesData.push({
+          date: entry.date,
+          score: ucrScore
+        });
+      } catch (error) {
+        // エラーがあっても継続
+        continue;
+      }
+    }
+
+    return timeSeriesData.length > 0 ? timeSeriesData : null;
+  }
+
+  private hasValidUCRData(data: WellnessData): boolean {
+    return !!(data.hrv && data.hrv > 0 && data.rhr && data.rhr > 0);
+  }
+
+  private calculateCurrentUCRScore(current: WellnessData, historical: WellnessData[]): number {
+    // 簡略版UCR計算（フルバージョンは既存のcalculateメソッドを使用）
+    const input: UCRCalculationInput = { current, historical };
+    const result = this.calculate(input, { skipTrendAnalysis: true });
+    return result.score;
+  }
+
+  private calculateMomentum(timeSeriesData: Array<{date: string, score: number}>, targetDate: string): {value: number, category: string} | null {
+    const lookbackDays = this.config.trend.momentum.lookbackDays;
+    const currentIndex = timeSeriesData.findIndex(d => d.date === targetDate);
+    
+    if (currentIndex < lookbackDays) return null;
+    
+    const currentScore = timeSeriesData[currentIndex].score;
+    const pastScore = timeSeriesData[currentIndex - lookbackDays].score;
+    
+    if (pastScore === 0) return null;
+    
+    // ROC（Rate of Change）計算
+    const momentum = ((currentScore - pastScore) / pastScore) * 100;
+    
+    // カテゴリ分類
+    let category: string;
+    const thresholds = this.config.trend.momentum.thresholds;
+    
+    if (momentum >= thresholds.strongPositive) {
+      category = 'POSITIVE';
+    } else if (momentum <= thresholds.strongNegative) {
+      category = 'NEGATIVE';
+    } else if (momentum > thresholds.positive) {
+      category = 'POSITIVE';
+    } else if (momentum < thresholds.negative) {
+      category = 'NEGATIVE';
+    } else {
+      category = 'NEUTRAL';
+    }
+    
+    return {
+      value: Math.round(momentum * 10) / 10,
+      category
+    };
+  }
+
+  private calculateVolatility(timeSeriesData: Array<{date: string, score: number}>): {value: number, level: string, bandPosition: number} | null {
+    const period = this.config.trend.volatility.period;
+    
+    if (timeSeriesData.length < period + 1) return null;
+    
+    // True Range計算
+    const trueRanges: number[] = [];
+    for (let i = 1; i < timeSeriesData.length; i++) {
+      const tr = Math.abs(timeSeriesData[i].score - timeSeriesData[i - 1].score);
+      trueRanges.push(tr);
+    }
+    
+    if (trueRanges.length < period) return null;
+    
+    // EMAによるATR計算
+    const alpha = this.config.trend.volatility.emaAlpha;
+    let atr = trueRanges[0];
+    const volatilityHistory: number[] = [atr];
+    
+    for (let i = 1; i < trueRanges.length; i++) {
+      atr = alpha * trueRanges[i] + (1 - alpha) * atr;
+      volatilityHistory.push(atr);
+    }
+    
+    const currentVolatility = volatilityHistory[volatilityHistory.length - 1];
+    
+    // ボリンジャーバンド計算
+    const bands = this.calculateVolatilityBands(volatilityHistory);
+    
+    // レベル分類
+    let level = 'MODERATE';
+    let bandPosition = 0;
+    
+    if (bands) {
+      if (currentVolatility > bands.upper) {
+        level = 'HIGH';
+      } else if (currentVolatility < bands.lower) {
+        level = 'LOW';
+      }
+      
+      // 標準化位置（-2.0 to +2.0）
+      bandPosition = (currentVolatility - bands.middle) / bands.stdDev;
+      bandPosition = Math.max(-2.0, Math.min(2.0, bandPosition));
+    }
+    
+    return {
+      value: Math.round(currentVolatility * 100) / 100,
+      level: level as 'LOW' | 'MODERATE' | 'HIGH',
+      bandPosition: Math.round(bandPosition * 100) / 100
+    };
+  }
+
+  private calculateVolatilityBands(volatilityHistory: number[]): {upper: number, middle: number, lower: number, stdDev: number} | null {
+    const period = this.config.trend.volatility.bollinger.period;
+    const stdDevMultiplier = this.config.trend.volatility.bollinger.stdDevMultiplier;
+    
+    if (volatilityHistory.length < period) return null;
+    
+    // 最新period期間のデータ
+    const recentData = volatilityHistory.slice(-period);
+    
+    // SMA計算
+    const sma = recentData.reduce((sum, val) => sum + val, 0) / period;
+    
+    // 標準偏差計算
+    const variance = recentData.reduce((sum, val) => sum + Math.pow(val - sma, 2), 0) / period;
+    const stdDev = Math.sqrt(variance);
+    
+    return {
+      upper: sma + (stdDev * stdDevMultiplier),
+      middle: sma,
+      lower: sma - (stdDev * stdDevMultiplier),
+      stdDev
+    };
+  }
+
+  private determineTrendStateKey(ucrScore: number, momentumCategory: string): string {
+    // UCRレベル判定
+    let level: string;
+    if (ucrScore >= 85) {
+      level = 'HIGH';
+    } else if (ucrScore >= 65) {
+      level = 'MEDIUM';
+    } else {
+      level = 'LOW';
+    }
+    
+    return `${level}_${momentumCategory}`;
+  }
+
+  private getTrendStateName(stateKey: string): string {
+    const stateMap: {[key: string]: string} = {
+      'HIGH_POSITIVE': 'スーパーコンペンセーション/ピーキング',
+      'HIGH_NEUTRAL': '安定した適応',
+      'HIGH_NEGATIVE': '疲労の兆候/早期テーパー',
+      'MEDIUM_POSITIVE': '生産的なリバウンド',
+      'MEDIUM_NEUTRAL': '均衡状態',
+      'MEDIUM_NEGATIVE': '機能的オーバーリーチング',
+      'LOW_POSITIVE': '回復進行中',
+      'LOW_NEUTRAL': '停滞した疲労',
+      'LOW_NEGATIVE': '急性不適応/高リスク'
+    };
+    
+    return stateMap[stateKey] || '均衡状態';
+  }
+
+  private getTrendStateCode(stateKey: string): number {
+    const codeMap: {[key: string]: number} = {
+      'HIGH_POSITIVE': 1,
+      'HIGH_NEUTRAL': 2,
+      'HIGH_NEGATIVE': 3,
+      'MEDIUM_POSITIVE': 4,
+      'MEDIUM_NEUTRAL': 5,
+      'MEDIUM_NEGATIVE': 6,
+      'LOW_POSITIVE': 7,
+      'LOW_NEUTRAL': 8,
+      'LOW_NEGATIVE': 9
+    };
+    
+    return codeMap[stateKey] || 5;
+  }
+
+  private generateInterpretation(ucrScore: number, momentum: number, volatility: number, volatilityLevel: string, trendState: string): string {
+    // 基本情報
+    let baseInfo = `UCRスコア${ucrScore}点`;
+    
+    if (momentum !== null && momentum !== undefined) {
+      const momentumStr = momentum >= 0 ? `+${momentum}` : `${momentum}`;
+      baseInfo += `で過去7日間${momentumStr}%${momentum >= 0 ? 'の上昇' : 'の下降'}。`;
+    } else {
+      baseInfo += '（モメンタム計算不可）。';
+    }
+    
+    // ボラティリティ情報
+    let volatilityInfo = '';
+    if (volatilityLevel === 'HIGH') {
+      volatilityInfo = `ボラティリティが統計的に有意に高い状態（${volatility}）。`;
+    } else if (volatilityLevel === 'LOW') {
+      volatilityInfo = `ボラティリティが統計的に有意に低く安定（${volatility}）。`;
+    }
+    
+    // 簡略化された解釈（完全版は必要に応じて拡張）
+    let assessment = '';
+    if (trendState.includes('スーパーコンペンセーション')) {
+      assessment = volatilityLevel === 'LOW' ? '理想的なピーキング状態。' : 
+                   volatilityLevel === 'HIGH' ? '不安定なピーク状態。' : '良好なピーキング状態。';
+    } else if (trendState.includes('疲労')) {
+      assessment = '疲労蓄積の兆候。負荷調整を検討してください。';
+    } else if (trendState.includes('回復')) {
+      assessment = '回復プロセスが進行中。継続的な回復が重要です。';
+    } else {
+      assessment = 'バランスの取れた状態です。';
+    }
+    
+    return `${baseInfo}『${trendState}』の状態で、${assessment}${volatilityInfo}`;
+  }
+
+  // ユーティリティ関数
+  private calculateMean(values: number[]): number {
+    return values.length > 0 ? values.reduce((sum, val) => sum + val, 0) / values.length : 0;
+  }
+
+  private calculateStdDev(values: number[]): number {
+    if (values.length <= 1) return 0.1;
+    const mean = this.calculateMean(values);
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1);
+    return Math.sqrt(variance);
+  }
+}

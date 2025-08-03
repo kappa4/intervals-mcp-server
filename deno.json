@@ -29,7 +29,12 @@
   },
   "tasks": {
     "dev": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv --watch main.ts",
-    "start": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv main.ts"
+    "start": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv main.ts",
+    "test": "deno test --allow-net --allow-env --coverage=coverage",
+    "test:unit": "deno test tests/unit/ --parallel",
+    "test:integration": "deno test tests/integration/ --allow-net",
+    "test:e2e": "deno test tests/e2e/ --allow-all",
+    "coverage": "deno coverage coverage --lcov > coverage.lcov"
   },
   "imports": {
     "std/": "https://deno.land/std@0.208.0/"
