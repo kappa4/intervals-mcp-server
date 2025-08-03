@@ -2,7 +2,8 @@
   "compilerOptions": {
     "allowJs": true,
     "lib": [
-      "deno.window"
+      "deno.window",
+      "deno.unstable"
     ],
     "strict": true
   },
@@ -30,10 +31,10 @@
   "tasks": {
     "dev": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv --watch main.ts",
     "start": "deno run --allow-net --allow-read --allow-write --allow-env --unstable-kv main.ts",
-    "test": "deno test --allow-net --allow-env --coverage=coverage",
-    "test:unit": "deno test tests/unit/ --parallel",
-    "test:integration": "deno test tests/integration/ --allow-net",
-    "test:e2e": "deno test tests/e2e/ --allow-all",
+    "test": "deno test --allow-net --allow-env --unstable-kv --coverage=coverage",
+    "test:unit": "deno test tests/unit/ --parallel --allow-net --allow-env --unstable-kv",
+    "test:integration": "deno test tests/integration/ --allow-net --allow-env --unstable-kv",
+    "test:e2e": "deno test tests/e2e/ --allow-all --unstable-kv",
     "coverage": "deno coverage coverage --lcov > coverage.lcov"
   },
   "imports": {
