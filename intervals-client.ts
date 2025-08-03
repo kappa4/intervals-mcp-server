@@ -92,14 +92,23 @@ export class IntervalsAPIClient {
   }
 
   async getActivity(activityId: number): Promise<IntervalsActivity> {
-    return this.makeRequest<IntervalsActivity>(`/activities/${activityId}`);
+    // The API uses a different path pattern and returns an array
+    const athleteIdNumeric = this.athleteId.replace('i', '');
+    const response = await this.makeRequest<IntervalsActivity[]>(
+      `/../../../api/v1/athlete/${athleteIdNumeric}/activities/${activityId}`
+    );
+    
+    if (!response || response.length === 0) {
+      throw new Error(`Activity ${activityId} not found`);
+    }
+    
+    return response[0];
   }
 
   async updateActivity(activityId: number, data: Partial<IntervalsActivity>): Promise<IntervalsActivity> {
-    return this.makeRequest<IntervalsActivity>(`/activities/${activityId}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    });
+    // Note: The Intervals.icu API may not support updating activities via API
+    // This returns 405 Method Not Allowed
+    throw new Error("Activity updates are not supported by the Intervals.icu API");
   }
 
   async deleteActivity(activityId: number): Promise<void> {

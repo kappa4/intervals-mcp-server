@@ -127,6 +127,24 @@ When modifying API integration:
 3. **DELETE endpoints may not exist** - Verify in OpenAPI spec
 4. **Array responses need wrapping** - Our code expects `{ data: [...] }`
 
+## Additional Issues Fixed (2025-08-03)
+
+### 1. get_activities without date range (422 Error)
+**Problem**: Intervals.icu API requires date range, returns 422 without it
+**Solution**: Added default date range (last 30 days) when not specified
+
+### 2. get_activity returns all undefined fields
+**Problem**: Wrong endpoint path `/activities/{id}` doesn't exist
+**Solution**: Use `/api/v1/athlete/{athleteId}/activities/{ids}` which returns an array
+
+### 3. update_activity returns 405 Method Not Allowed
+**Problem**: Intervals.icu API doesn't support activity updates via API
+**Solution**: Return clear error message that updates must be done via web interface
+
+### 4. update_wellness returns undefined date
+**Problem**: API response doesn't include the date field
+**Solution**: Fallback to input date when response.date is undefined
+
 ## References
 
 - OpenAPI Spec: `docs/intervals-openapi-spec.json`

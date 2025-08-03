@@ -462,9 +462,8 @@ export class MCPHandler {
       throw new Error("activity_id is required");
     }
 
-    const updated = await this.intervalsClient.updateActivity(activity_id, updateData);
-    
-    return `Successfully updated activity "${updated.name}" (ID: ${updated.id})`;
+    // Note: The Intervals.icu API does not support updating activities
+    throw new Error("Activity updates are not supported by the Intervals.icu API. Activities can only be modified through the web interface.");
   }
 
   private async getWellness(args: any): Promise<string> {
@@ -508,7 +507,8 @@ export class MCPHandler {
 
     const updated = await this.intervalsClient.updateWellnessEntry(date, updateData);
     
-    return `Successfully updated wellness data for ${updated.date}`;
+    // The API might not return the date in the response, so use the input date
+    return `Successfully updated wellness data for ${updated.date || date}`;
   }
 
   private async getAthleteInfo(): Promise<string> {
