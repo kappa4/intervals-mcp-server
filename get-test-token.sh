@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# OAuth認証フローの手順を表示
+
+echo "=== OAuth Token取得手順 ==="
+echo ""
+echo "1. ngrokが起動していることを確認:"
+echo "   ngrok http --domain=verified-snail-hugely.ngrok-free.app 8080"
+echo ""
+echo "2. 以下のURLをブラウザで開く:"
+echo "   https://kpnco-intervals-mcp-77.deno.dev/oauth/authorize?client_id=hjMK7l9wVP5eusS13a7qWA&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fcallback&response_type=code&state=test-$(date +%s)&code_challenge=test123456789012345678901234567890123456&code_challenge_method=S256"
+echo ""
+echo "3. ngrok経由でコールバックを受信したら、URLから 'code' パラメータをコピー"
+echo ""
+echo "4. 以下のコマンドでトークンを取得（CODEを置き換えて実行）:"
+echo ""
+echo "curl -X POST https://kpnco-intervals-mcp-77.deno.dev/oauth/token \\"
+echo "  -H \"Content-Type: application/x-www-form-urlencoded\" \\"
+echo "  -d \"grant_type=authorization_code&code=CODE&client_id=hjMK7l9wVP5eusS13a7qWA&client_secret=SdHpio23ejXPgjdOJK9pXHk7dkHUaeOXe-N-hzvN3YU&redirect_uri=http://localhost:8080/callback&code_verifier=test1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234\""
+echo ""
+echo "5. 取得したaccess_tokenを環境変数に設定:"
+echo "   export TEST_ACCESS_TOKEN=\"YOUR_TOKEN\""
+echo ""
+echo "6. ブラックボックステストを実行:"
+echo "   ./test-mcp-tools-blackbox.ts"

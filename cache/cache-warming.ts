@@ -207,7 +207,8 @@ export class CacheWarmer {
     // Calculate UCR (this won't be cached but the underlying data will be)
     if (wellnessData.length > 0) {
       const calculator = this.client.getCalculator();
-      calculator.calculateUCR(wellnessData, date);
+      const input = { wellnessData, today: date };
+      calculator.calculate(input);
     }
   }
 

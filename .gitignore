@@ -38,3 +38,8 @@ build/
 kv.db
 kv.db-shm
 kv.db-wal
+
+# Test tokens and credentials
+.test-token
+test-report-*.md
+.oauth-token
