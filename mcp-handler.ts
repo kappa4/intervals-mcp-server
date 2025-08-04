@@ -514,20 +514,32 @@ export class MCPHandler {
   private async getWellness(args: any): Promise<string> {
     const { limit = 7, oldest, newest } = args;
     
+    // intervals.icu APIにはlimitパラメータがないため、日付範囲で制御
+    // デフォルトで最近のデータのみ取得するように設定
+    const now = new Date();
+    const defaultOldest = new Date(now);
+    defaultOldest.setDate(defaultOldest.getDate() - Math.min(limit * 2, 60)); // limitの2倍または60日前まで
+    
     const wellness = await this.intervalsClient.getWellnessData({
-      limit: Math.min(limit, 30),
-      oldest,
-      newest
+      limit: Math.min(limit, 30), // APIには送信されないが、内部処理用に保持
+      oldest: oldest || defaultOldest.toISOString().split('T')[0],
+      newest: newest || now.toISOString().split('T')[0]
     });
 
     if (wellness.data.length === 0) {
       return "No wellness data found for the specified period.";
     }
 
-    let result = `Wellness data (${wellness.data.length} entries):\n\n`;
+    // intervals.icu APIがlimitを無視するため、クライアント側で制限を適用
+    const effectiveLimit = Math.min(limit, 30);
+    const limitedData = wellness.data.slice(0, effectiveLimit);
+
+    let result = `Wellness data (${limitedData.length} entries):\n\n`;
     
-    for (const entry of wellness.data) {
-      result += `**${entry.date}**\n`;
+    for (const entry of limitedData) {
+      // intervals.icu APIではdateフィールドがnullで、実際の日付はidフィールドに格納されている
+      const displayDate = entry.date || entry.id || 'Date not available';
+      result += `**${displayDate}**\n`;
       if (entry.sleep_quality) result += `- Sleep Quality: ${entry.sleep_quality}/5\n`;
       if (entry.sleep_hours) result += `- Sleep Hours: ${entry.sleep_hours}h\n`;
       if (entry.soreness) result += `- Soreness: ${entry.soreness}/5\n`;
