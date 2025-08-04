@@ -9,6 +9,7 @@ import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { IntervalsAPIClient } from "./intervals-client.ts";
 import { log, info, warn, error } from "./logger.ts";
 import { OAuthServer } from "./oauth/auth-server.ts";
+import { createUnauthorizedResponse } from "./oauth/middleware.ts";
 import { MCPHandler } from "./mcp-handler.ts";
 import { WellnessCache } from "./cache/wellness-cache.ts";
 import { getWellnessCacheKey } from "./cache/cache-utils.ts";
@@ -68,7 +69,7 @@ try {
 }
 
 // Initialize MCP handler
-const mcpHandler = new MCPHandler(intervalsClient, oauthServer);
+const mcpHandler = new MCPHandler(intervalsClient);
 
 // CORS headers for browser-based clients
 const CORS_HEADERS = {
@@ -240,6 +241,17 @@ async function handler(req: Request): Promise<Response> {
   // MCP protocol endpoints (authentication required)
   if (path === "/" || path.startsWith("/mcp")) {
     try {
+      // Authenticate all MCP endpoints (following Memory MCP pattern)
+      log(`[Auth] Authenticating MCP request to ${path}`);
+      const authContext = await oauthServer.authenticate(req);
+      log(`[Auth] Authentication result: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
+      
+      if (!authContext.authenticated) {
+        warn(`[Auth] Authentication failed for ${path}`);
+        return createUnauthorizedResponse("Bearer token required");
+      }
+      log(`[Auth] Authentication successful for ${path}, client: ${authContext.client_id}`);
+      
       return await mcpHandler.handleRequest(req);
     } catch (err) {
       error("MCP handler error:", err);

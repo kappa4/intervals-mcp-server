@@ -7,8 +7,6 @@ import { log, debug, warn, error } from "./logger.ts";
 import { IntervalsAPIClient } from "./intervals-client.ts";
 import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
 import { UCRToolHandler, UCR_TOOLS } from "./ucr-tools.ts";
-import { OAuthServer } from "./oauth/auth-server.ts";
-import { createUnauthorizedResponse } from "./oauth/middleware.ts";
 import type {
   MCPRequest,
   MCPResponse,
@@ -30,11 +28,9 @@ export class MCPHandler {
   private clientInfo?: { name: string; version: string };
   private intervalsClient: IntervalsAPIClient;
   private ucrToolHandler: UCRToolHandler;
-  private oauthServer: OAuthServer;
 
-  constructor(intervalsClient: IntervalsAPIClient, oauthServer: OAuthServer) {
+  constructor(intervalsClient: IntervalsAPIClient) {
     this.intervalsClient = intervalsClient;
-    this.oauthServer = oauthServer;
     
     // UCRツールハンドラーを初期化
     const apiOptions = {
@@ -43,7 +39,7 @@ export class MCPHandler {
     };
     this.ucrToolHandler = new UCRToolHandler(apiOptions);
     
-    debug("MCP Handler initialized with OAuth authentication and UCR tools");
+    debug("MCP Handler initialized with UCR tools");
   }
 
   async handleRequest(req: Request): Promise<Response> {
@@ -88,26 +84,9 @@ export class MCPHandler {
         throw new Error(`Unsupported HTTP method: ${req.method}`);
       }
 
-      // Check if authentication is required for this method
-      const authNotRequiredMethods = ["initialize", "initialized", "notifications/initialized"];
-      const requiresAuth = !authNotRequiredMethods.includes(mcpRequest.method);
-
-      debug(`Method: ${mcpRequest.method}, Requires auth: ${requiresAuth}`);
-
-      if (requiresAuth) {
-        // Authentication check for protected endpoints
-        const authContext = await this.oauthServer.authenticate(req);
-        debug(`Auth context: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
-        
-        if (!authContext.authenticated) {
-          warn(`MCP request rejected - authentication required for method: ${mcpRequest.method}`);
-          warn(`Auth failure details: ${JSON.stringify(authContext)}`);
-          return createUnauthorizedResponse("Authentication required for MCP access");
-        }
-        debug(`MCP request authenticated for client: ${authContext.client_id}`);
-      } else {
-        debug(`Bypassing authentication for method: ${mcpRequest.method}`);
-      }
+      // Authentication is now handled at the main.ts level for all MCP endpoints
+      // Following Memory MCP pattern where all MCP requests require authentication
+      debug(`Processing MCP method: ${mcpRequest.method}`);
 
       const mcpResponse = await this.handleMCPRequest(mcpRequest);
       
