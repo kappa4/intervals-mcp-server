@@ -6,6 +6,7 @@
 import { WellnessCache } from "./wellness-cache.ts";
 import { log } from "../logger.ts";
 import type { CachedUCRIntervalsClient } from "../ucr-intervals-client-cached.ts";
+import type { UCRCalculationInput } from "../ucr-types.ts";
 
 export interface CacheWarmingConfig {
   enabled: boolean;
@@ -207,7 +208,9 @@ export class CacheWarmer {
     // Calculate UCR (this won't be cached but the underlying data will be)
     if (wellnessData.length > 0) {
       const calculator = this.client.getCalculator();
-      const input = { wellnessData, today: date };
+      // Use the most recent data as current, rest as historical
+      const [current, ...historical] = wellnessData;
+      const input: UCRCalculationInput = { current, historical };
       calculator.calculate(input);
     }
   }
