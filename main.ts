@@ -238,36 +238,63 @@ async function handler(req: Request): Promise<Response> {
     }
   }
 
-  // MCP protocol endpoints (authentication required)
+  // Authenticate all MCP endpoints (following Memory MCP pattern exactly)
   if (path === "/" || path.startsWith("/mcp")) {
-    try {
-      // Authenticate all MCP endpoints (following Memory MCP pattern)
-      log(`[Auth] Authenticating MCP request to ${path}`);
-      const authContext = await oauthServer.authenticate(req);
-      log(`[Auth] Authentication result: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
-      
-      if (!authContext.authenticated) {
-        warn(`[Auth] Authentication failed for ${path}`);
-        return createUnauthorizedResponse("Bearer token required");
-      }
-      log(`[Auth] Authentication successful for ${path}, client: ${authContext.client_id}`);
-      
-      return await mcpHandler.handleRequest(req);
-    } catch (err) {
-      error("MCP handler error:", err);
-      return new Response(
-        JSON.stringify({ 
-          error: "mcp_error",
-          message: "Failed to process MCP request"
-        }),
-        { 
-          status: 500,
-          headers: { 
-            ...CORS_HEADERS, 
-            "Content-Type": "application/json" 
-          } 
+    log(`[Auth] Authenticating MCP request to ${path}`);
+    const authContext = await oauthServer.authenticate(req);
+    log(`[Auth] Authentication result: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
+    
+    if (!authContext.authenticated) {
+      warn(`[Auth] Authentication failed for ${path}`);
+      return createUnauthorizedResponse("Bearer token required");
+    }
+    log(`[Auth] Authentication successful for ${path}, client: ${authContext.client_id}`);
+    
+    const sessionId = crypto.randomUUID();
+    
+    // GET /mcp endpoint for connection status
+    if ((path === "/" || path === "/mcp") && req.method === "GET") {
+      return new Response(JSON.stringify({
+        status: "connected",
+        protocolVersion: "2024-11-05",
+        sessionId: sessionId
+      }), {
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/json",
+          "mcp-session-id": sessionId
         }
-      );
+      });
+    }
+    
+    // DELETE /mcp endpoint for session termination
+    if ((path === "/" || path === "/mcp") && req.method === "DELETE") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS
+      });
+    }
+    
+    // Main MCP endpoint (POST)
+    if ((path === "/" || path === "/mcp") && req.method === "POST") {
+      try {
+        return await mcpHandler.handleRequest(req);
+      } catch (err) {
+        error("MCP handler error:", err);
+        return new Response(
+          JSON.stringify({ 
+            error: "mcp_error",
+            message: "Failed to process MCP request"
+          }),
+          { 
+            status: 500,
+            headers: { 
+              ...CORS_HEADERS, 
+              "Content-Type": "application/json" 
+            } 
+          }
+        );
+      }
     }
   }
   
