@@ -114,4 +114,28 @@ export class TokenStorage extends KVStorageBase {
     // Deno KV handles expiration automatically with expireIn option
     // This method is kept for API compatibility but doesn't need to do anything
   }
+
+  /**
+   * Get the number of tokens in storage (for debugging)
+   */
+  async size(): Promise<number> {
+    const kv = await this.getKV();
+    let count = 0;
+    
+    // Count access tokens
+    const accessPrefix = this.createKey("access");
+    const accessEntries = kv.list<AccessToken>({ prefix: accessPrefix });
+    for await (const _ of accessEntries) {
+      count++;
+    }
+    
+    // Count refresh tokens
+    const refreshPrefix = this.createKey("refresh");
+    const refreshEntries = kv.list<RefreshToken>({ prefix: refreshPrefix });
+    for await (const _ of refreshEntries) {
+      count++;
+    }
+    
+    return count;
+  }
 }

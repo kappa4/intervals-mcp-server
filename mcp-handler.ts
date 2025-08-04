@@ -50,7 +50,12 @@ export class MCPHandler {
     const url = new URL(req.url);
     const path = url.pathname;
     
+    // Enhanced logging for debugging OAuth issues
+    const authHeader = req.headers.get("Authorization");
+    const userAgent = req.headers.get("User-Agent") || "Unknown";
     debug(`Handling MCP HTTP request: ${req.method} ${path}`);
+    debug(`User-Agent: ${userAgent}`);
+    debug(`Authorization: ${authHeader ? "Bearer token present" : "No auth header"}`);
 
     // CORS headers for all MCP responses
     const corsHeaders = {
@@ -87,11 +92,16 @@ export class MCPHandler {
       const authNotRequiredMethods = ["initialize", "initialized", "notifications/initialized"];
       const requiresAuth = !authNotRequiredMethods.includes(mcpRequest.method);
 
+      debug(`Method: ${mcpRequest.method}, Requires auth: ${requiresAuth}`);
+
       if (requiresAuth) {
         // Authentication check for protected endpoints
         const authContext = await this.oauthServer.authenticate(req);
+        debug(`Auth context: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
+        
         if (!authContext.authenticated) {
           warn(`MCP request rejected - authentication required for method: ${mcpRequest.method}`);
+          warn(`Auth failure details: ${JSON.stringify(authContext)}`);
           return createUnauthorizedResponse("Authentication required for MCP access");
         }
         debug(`MCP request authenticated for client: ${authContext.client_id}`);
@@ -201,6 +211,8 @@ export class MCPHandler {
   }
 
   private async handleListTools(): Promise<ListToolsResponse> {
+    debug("handleListTools called - preparing tool list");
+    
     const intervalTools = [
         {
           name: "get_activities",
@@ -325,6 +337,7 @@ export class MCPHandler {
     const response = { tools: allTools };
     
     debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);
+    debug("Tool names:", allTools.map(t => t.name).join(", "));
     return response;
   }
 

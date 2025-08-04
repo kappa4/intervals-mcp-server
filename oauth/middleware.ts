@@ -31,6 +31,7 @@ export function createAuthMiddleware(tokenStorage: TokenStorage) {
     
     if (!accessToken) {
       warn("[Auth] Token validation failed - token not found in storage");
+      warn("[Auth] Token storage has", await tokenStorage.size(), "tokens");
       return { authenticated: false };
     }
 
