@@ -195,27 +195,8 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
       // intervals.icuに送信
       const responseData = await this.updateWellnessEntry(date, updateData);
       
-      // レスポンスデータをログ出力
-      log("DEBUG", `API Response: ${JSON.stringify(responseData, null, 2)}`);
-      
       // 更新結果を確認
       log("INFO", `After update - readiness: ${responseData.readiness}, UCRMomentum: ${responseData.UCRMomentum}`);
-      
-      // 送信データと受信データの差分を確認
-      const sentFields = Object.keys(updateData);
-      const updatedFields = sentFields.filter(field => {
-        return responseData[field] !== undefined && responseData[field] === updateData[field];
-      });
-      const notUpdatedFields = sentFields.filter(field => {
-        return responseData[field] === undefined || responseData[field] !== updateData[field];
-      });
-      
-      if (notUpdatedFields.length > 0) {
-        log("WARN", `Fields not updated as expected: ${notUpdatedFields.join(', ')}`);
-        notUpdatedFields.forEach(field => {
-          log("WARN", `  ${field}: sent=${updateData[field]}, received=${responseData[field]}`);
-        });
-      }
       
       log("INFO", `Successfully updated intervals.icu wellness entry for ${date} with UCR data`);
     } catch (error) {
