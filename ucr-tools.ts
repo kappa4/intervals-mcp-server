@@ -203,7 +203,9 @@ export class UCRToolHandler {
           momentum: result.trend.momentum,
           volatility: result.trend.volatility,
           volatility_level: result.trend.volatilityLevel,
+          volatility_band_position: result.trend.volatilityBandPosition,
           trend_state: result.trend.trendState,
+          trend_state_code: result.trend.trendStateCode,
           interpretation: result.trend.interpretation
         } : null
       },
