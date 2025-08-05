@@ -7,6 +7,7 @@ import { WellnessCache } from "./wellness-cache.ts";
 import { log } from "../logger.ts";
 import type { CachedUCRIntervalsClient } from "../ucr-intervals-client-cached.ts";
 import type { UCRCalculationInput } from "../ucr-types.ts";
+import { DistributedLock } from "./distributed-lock.ts";
 
 export interface CacheWarmingConfig {
   enabled: boolean;
@@ -27,6 +28,7 @@ export class CacheWarmer {
   private client: CachedUCRIntervalsClient;
   private config: CacheWarmingConfig;
   private isWarming = false;
+  private distributedLock: DistributedLock;
 
   constructor(
     cache: WellnessCache,
@@ -42,6 +44,7 @@ export class CacheWarmer {
       warmingTasks: this.getDefaultWarmingTasks(),
       ...config
     };
+    this.distributedLock = new DistributedLock();
   }
 
   /**
@@ -96,6 +99,18 @@ export class CacheWarmer {
       return;
     }
 
+    // Try to acquire distributed lock
+    const lockKey = "cache-warming";
+    const lockAcquired = await this.distributedLock.acquireLock(lockKey, {
+      ttlMs: 300000, // 5 minutes TTL
+      retryAttempts: 0 // Don't retry, just skip if locked
+    });
+
+    if (!lockAcquired) {
+      log("INFO", "Cache warming skipped - another instance is already warming the cache");
+      return;
+    }
+
     this.isWarming = true;
     const startTime = Date.now();
     log("INFO", "Starting cache warming process...");
@@ -122,6 +137,8 @@ export class CacheWarmer {
       log("ERROR", "Cache warming failed:", error);
     } finally {
       this.isWarming = false;
+      // Release the distributed lock
+      await this.distributedLock.releaseLock(lockKey);
     }
   }
 

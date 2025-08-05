@@ -7,6 +7,7 @@ import { WellnessCache } from "./wellness-cache.ts";
 import { log } from "../logger.ts";
 import type { CachedUCRIntervalsClient } from "../ucr-intervals-client-cached.ts";
 import type { CacheKeyComponents } from "./cache-types.ts";
+import { DistributedLock } from "./distributed-lock.ts";
 
 export interface BackgroundUpdateConfig {
   enabled: boolean;
@@ -34,6 +35,7 @@ export class BackgroundCacheUpdater {
   private isRunning = false;
   private updateInProgress = new Set<string>();
   private checkIntervalId?: number;
+  private distributedLock: DistributedLock;
 
   constructor(
     cache: WellnessCache,
@@ -51,6 +53,7 @@ export class BackgroundCacheUpdater {
       retryDelay: 5000,
       ...config
     };
+    this.distributedLock = new DistributedLock();
   }
 
   /**
@@ -96,6 +99,18 @@ export class BackgroundCacheUpdater {
   private async checkAndUpdateCache(): Promise<void> {
     if (!this.isRunning) return;
 
+    // Try to acquire distributed lock for background updates
+    const lockKey = "background-cache-update";
+    const lockAcquired = await this.distributedLock.acquireLock(lockKey, {
+      ttlMs: 120000, // 2 minutes TTL
+      retryAttempts: 0 // Don't retry, just skip if locked
+    });
+
+    if (!lockAcquired) {
+      log("DEBUG", "Background cache check skipped - another instance is already updating");
+      return;
+    }
+
     log("DEBUG", "Running background cache check");
 
     try {
@@ -112,6 +127,9 @@ export class BackgroundCacheUpdater {
       
     } catch (error) {
       log("ERROR", "Background cache check failed:", error);
+    } finally {
+      // Release the distributed lock
+      await this.distributedLock.releaseLock(lockKey);
     }
   }
 

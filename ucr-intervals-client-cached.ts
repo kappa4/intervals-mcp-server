@@ -42,11 +42,12 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
       this.backgroundUpdater = new BackgroundCacheUpdater(this.cache, this);
       
       // Start cache warming and background updates
-      if (Deno.env.get("CACHE_WARMING") !== "false") {
+      // Changed to opt-in for serverless environments
+      if (Deno.env.get("CACHE_WARMING_ON_STARTUP") === "true") {
         this.cacheWarmer.schedulePeriodicWarming();
       }
       
-      if (Deno.env.get("CACHE_BACKGROUND_UPDATE") !== "false") {
+      if (Deno.env.get("CACHE_BACKGROUND_UPDATE") === "true") {
         this.backgroundUpdater.start();
       }
       
