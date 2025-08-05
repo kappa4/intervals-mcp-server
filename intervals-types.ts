@@ -54,6 +54,19 @@ export interface IntervalsWellness {
   sick?: boolean;
   injured?: boolean;
   notes?: string;
+  readiness?: number;  // UCR score (0-100)
+  sleepSecs?: number;  // Sleep seconds (alternative to sleep_hours)
+  sleepScore?: number; // Sleep score (0-100)
+  hrv?: number;        // HRV value (alias for hr_variability)
+  restingHR?: number;  // Resting HR (alias for resting_hr)
+  injury?: number;     // Injury level (1-4 scale)
+  mood?: number;       // Mood level
+  ctl?: number;        // Chronic Training Load
+  atl?: number;        // Acute Training Load
+  rampRate?: number;   // Ramp rate
+  ctlLoad?: number;    // CTL load
+  atlLoad?: number;    // ATL load
+  sportInfo?: Record<string, any>; // Sport-specific information
   user_data?: Record<string, any>;
   // Custom fields can be added dynamically
   [key: string]: any;
