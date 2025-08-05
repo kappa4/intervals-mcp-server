@@ -176,11 +176,10 @@ export class MCPHandler {
     debug(`Initialized with client: ${params.clientInfo.name} v${params.clientInfo.version}`);
 
     return {
-      protocolVersion: "2024-11-05",
+      protocolVersion: "2025-06-18",
       capabilities: {
-        tools: { listChanged: false },
-        resources: { listChanged: false },
-        logging: {}
+        tools: { list_changed: true },
+        resources: { list: false, read: false },
       },
       serverInfo: {
         name: "intervals-mcp-server",

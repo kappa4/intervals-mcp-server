@@ -240,15 +240,15 @@ async function handler(req: Request): Promise<Response> {
 
   // Authenticate all MCP endpoints (following Memory MCP pattern exactly)
   if (path === "/" || path.startsWith("/mcp")) {
-    log(`[Auth] Authenticating MCP request to ${path}`);
+    info(`[Auth] Authenticating MCP request to ${path}`);
     const authContext = await oauthServer.authenticate(req);
-    log(`[Auth] Authentication result: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
+    info(`[Auth] Authentication result: authenticated=${authContext.authenticated}, client_id=${authContext.client_id || 'none'}`);
     
     if (!authContext.authenticated) {
       warn(`[Auth] Authentication failed for ${path}`);
       return createUnauthorizedResponse("Bearer token required");
     }
-    log(`[Auth] Authentication successful for ${path}, client: ${authContext.client_id}`);
+    info(`[Auth] Authentication successful for ${path}, client: ${authContext.client_id}`);
     
     const sessionId = crypto.randomUUID();
     
@@ -256,7 +256,7 @@ async function handler(req: Request): Promise<Response> {
     if ((path === "/" || path === "/mcp") && req.method === "GET") {
       return new Response(JSON.stringify({
         status: "connected",
-        protocolVersion: "2024-11-05",
+        protocolVersion: "2025-06-18",
         sessionId: sessionId
       }), {
         headers: {
