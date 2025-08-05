@@ -178,7 +178,7 @@ export class MCPHandler {
     return {
       protocolVersion: "2025-06-18",
       capabilities: {
-        tools: { list_changed: true },
+        tools: { listChanged: true },
         resources: { list: false, read: false },
       },
       serverInfo: {
