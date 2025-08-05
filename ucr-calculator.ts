@@ -237,7 +237,7 @@ export class UCRCalculator {
    */
   generateIntervalsIcuUpdate(result: UCRWithTrend): IntervalsIcuWellnessUpdate {
     const update: IntervalsIcuWellnessUpdate = {
-      readiness: result.score
+      readiness: Math.round(result.score)
     };
 
     if (result.trend) {
