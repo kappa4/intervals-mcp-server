@@ -110,6 +110,10 @@ Claude Code再開時は以下ドキュメントを自動参照してください
 - [ ] UCRテスト実行と齟齬検出
 - [ ] 齟齬解消とリファクタリング
 - [ ] GAS版との並行運用・検証
+- [ ] **キャッシュ最適化v2実装**（UCRロジック変更対応版）
+  - 提案書: `/Users/k.takahashi/src/github.com/kappa4/intervals-mcp-server/cache-optimization-proposal-v2.md`
+  - UCRバージョン管理によるキャッシュ無効化機能
+  - 動的TTL + バージョン管理統合
 
 ## 【SHOULD】セットアップ・起動方法
 
