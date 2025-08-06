@@ -119,7 +119,9 @@ async function handler(req: Request): Promise<Response> {
           total: totalToolsCount,
           interval_tools: intervalToolsCount,
           ucr_tools: ucrToolsCount
-        }
+        },
+        mcp_timeout_ms: 60000,
+        note: "If tools disappear after reload, try removing and re-adding the server in Claude settings"
       }),
       { 
         headers: { 

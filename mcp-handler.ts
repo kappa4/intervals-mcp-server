@@ -28,6 +28,8 @@ export class MCPHandler {
   private clientInfo?: { name: string; version: string };
   private intervalsClient: IntervalsAPIClient;
   private ucrToolHandler: UCRToolHandler;
+  private static toolsCache?: ListToolsResponse;
+  private requestTimings = new Map<string | number, number>();
 
   constructor(intervalsClient: IntervalsAPIClient) {
     this.intervalsClient = intervalsClient;
@@ -87,6 +89,11 @@ export class MCPHandler {
       // Authentication is now handled at the main.ts level for all MCP endpoints
       // Following Memory MCP pattern where all MCP requests require authentication
       debug(`Processing MCP method: ${mcpRequest.method}`);
+      
+      // Log request ID for timeout tracking
+      if (mcpRequest.id) {
+        debug(`Request ID: ${mcpRequest.id}`);
+      }
 
       const mcpResponse = await this.handleMCPRequest(mcpRequest);
       
@@ -128,6 +135,12 @@ export class MCPHandler {
 
   private async handleMCPRequest(request: MCPRequest): Promise<MCPResponse> {
     debug(`Handling MCP request: ${request.method}`, request);
+    
+    // Track request timing
+    const startTime = Date.now();
+    if (request.id) {
+      this.requestTimings.set(request.id, startTime);
+    }
 
     try {
       let result: any;
@@ -149,10 +162,18 @@ export class MCPHandler {
         case "notifications/cancelled":
           // Handle cancellation notification per MCP spec
           const cancelParams = request.params as { requestId: string; reason?: string };
-          debug(`Client sent cancellation for request ${cancelParams.requestId}: ${cancelParams.reason || 'No reason provided'}`);
           
-          // Log cancellation for debugging as per spec
-          log("INFO", `[MCP] Request ${cancelParams.requestId} cancelled: ${cancelParams.reason || 'No reason'}`);
+          // Log timing for cancelled request
+          const requestId = typeof cancelParams.requestId === 'string' ? parseInt(cancelParams.requestId) : cancelParams.requestId;
+          const startTime = this.requestTimings.get(requestId);
+          const duration = startTime ? Date.now() - startTime : 'unknown';
+          
+          log("WARN", `[MCP] Request ${cancelParams.requestId} cancelled after ${duration}ms: ${cancelParams.reason || 'No reason'}`);
+          
+          // Clean up timing data
+          if (requestId) {
+            this.requestTimings.delete(requestId);
+          }
           
           // Notifications don't have id and don't require response
           // Return null to signal 202 Accepted should be sent
@@ -173,9 +194,24 @@ export class MCPHandler {
           throw this.createError(MCP_ERROR_CODES.METHOD_NOT_FOUND, `Method ${request.method} not found`);
       }
 
-      return this.createResponse(request.id, result);
+      const response = this.createResponse(request.id, result);
+      
+      // Log request completion timing
+      if (request.id && this.requestTimings.has(request.id)) {
+        const duration = Date.now() - this.requestTimings.get(request.id)!;
+        log("INFO", `[MCP] Request ${request.id} (${request.method}) completed in ${duration}ms`);
+        this.requestTimings.delete(request.id);
+      }
+      
+      return response;
     } catch (err) {
       error(`Error handling request ${request.method}:`, err);
+      
+      // Clean up timing on error
+      if (request.id) {
+        this.requestTimings.delete(request.id);
+      }
+      
       return this.createErrorResponse(request.id, err);
     }
   }
@@ -202,8 +238,16 @@ export class MCPHandler {
   }
 
   private async handleListTools(): Promise<ListToolsResponse> {
+    const startTime = Date.now();
     log("INFO", "[MCP] tools/list called - preparing tool list");
     debug("handleListTools called - preparing tool list");
+    
+    // Return cached tools if available (static data, no need to regenerate)
+    if (MCPHandler.toolsCache) {
+      const duration = Date.now() - startTime;
+      log("INFO", `[MCP] Returning cached tools in ${duration}ms`);
+      return MCPHandler.toolsCache;
+    }
     
     const intervalTools = [
         {
@@ -328,7 +372,11 @@ export class MCPHandler {
     const allTools = [...intervalTools, ...UCR_TOOLS];
     const response = { tools: allTools };
     
-    log("INFO", `[MCP] Returning ${response.tools.length} tools (${intervalTools.length} interval + ${UCR_TOOLS.length} UCR)`);
+    // Cache the response for future use
+    MCPHandler.toolsCache = response;
+    
+    const duration = Date.now() - startTime;
+    log("INFO", `[MCP] Generated and cached ${response.tools.length} tools in ${duration}ms (${intervalTools.length} interval + ${UCR_TOOLS.length} UCR)`);
     debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);
     debug("Tool names:", allTools.map(t => t.name).join(", "));
     return response;
