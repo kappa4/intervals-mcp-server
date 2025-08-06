@@ -593,12 +593,47 @@ export class MCPHandler {
       result += `- Description: ${activity.description}\n`;
     }
     
+    // Heart rate data
+    if ((activity as any).average_heartrate) {
+      result += `- Avg HR: ${(activity as any).average_heartrate}bpm\n`;
+    }
+    if ((activity as any).max_heartrate) {
+      result += `- Max HR: ${(activity as any).max_heartrate}bpm\n`;
+    }
+    if ((activity as any).hr_load) {
+      result += `- HR Load: ${(activity as any).hr_load}\n`;
+    }
+    if ((activity as any).trimp) {
+      result += `- TRIMP: ${(activity as any).trimp.toFixed(1)}\n`;
+    }
+    
+    // Calories
+    if ((activity as any).calories) {
+      result += `- Calories: ${(activity as any).calories}kcal\n`;
+    }
+    
+    // Weather data (temperature and humidity)
+    if ((activity as any).average_temp !== null && (activity as any).average_temp !== undefined) {
+      result += `- Avg Temp: ${(activity as any).average_temp}°C\n`;
+    }
+    if ((activity as any).max_temp !== null && (activity as any).max_temp !== undefined) {
+      result += `- Max Temp: ${(activity as any).max_temp}°C\n`;
+    }
+    if ((activity as any).min_temp !== null && (activity as any).min_temp !== undefined) {
+      result += `- Min Temp: ${(activity as any).min_temp}°C\n`;
+    }
+    
     if (activity.icu_training_load) {
       result += `- Training Load: ${activity.icu_training_load}\n`;
     }
     
     if (activity.icu_intensity) {
       result += `- Intensity: ${activity.icu_intensity}\n`;
+    }
+    
+    // Device info (optional)
+    if ((activity as any).device_name) {
+      result += `- Device: ${(activity as any).device_name}\n`;
     }
     
     // Add custom fields if any
@@ -608,7 +643,10 @@ export class MCPHandler {
       'commute', 'icu_training_load', 'icu_atl', 'icu_ctl', 'icu_tss',
       'icu_intensity', 'icu_ri', 'icu_ef', 'icu_hr_zones', 'icu_power_zones',
       'power_meter', 'power_meter_battery', 'heart_rate_monitor', 'external_id',
-      'created', 'updated'
+      'created', 'updated',
+      // Add the new fields we're now explicitly handling
+      'average_heartrate', 'max_heartrate', 'hr_load', 'trimp', 'calories',
+      'average_temp', 'max_temp', 'min_temp', 'device_name'
     ];
     const customFields = this.getCustomFields(activity, knownFields);
     result += this.formatCustomFields(customFields);
