@@ -103,7 +103,7 @@ async function handler(req: Request): Promise<Response> {
   if (path === "/health") {
     // Count available MCP tools
     const intervalToolsCount = 5; // get_activities, get_activity, get_wellness, update_wellness, get_athlete_info
-    const ucrToolsCount = 5; // get_ucr_assessment, calculate_ucr_trends, update_wellness_assessment, check_ucr_setup, batch_calculate_ucr
+    const ucrToolsCount = 7; // get_ucr_assessment, calculate_ucr_trends, update_wellness_assessment, check_ucr_setup, batch_calculate_ucr, get_ucr_components, analyze_ucr_correlations
     const totalToolsCount = intervalToolsCount + ucrToolsCount;
     
     return new Response(
