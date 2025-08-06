@@ -63,6 +63,8 @@ export interface ServerCapabilities {
   resources?: {
     subscribe?: boolean;
     listChanged?: boolean;
+    list?: boolean;
+    read?: boolean;
   };
   tools?: {
     listChanged?: boolean;

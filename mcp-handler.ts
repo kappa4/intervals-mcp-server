@@ -146,6 +146,15 @@ export class MCPHandler {
             return null as any;
           }
           return this.createResponse(request.id, {});
+        case "notifications/cancelled":
+          // Handle cancellation notification
+          debug("Client sent cancelled notification");
+          if (!request.id) {
+            // Notifications don't have id, so return nothing
+            // This will be handled by the HTTP handler to return 202 Accepted
+            return null as any;
+          }
+          return this.createResponse(request.id, {});
         case "tools/list":
           result = await this.handleListTools();
           break;
@@ -173,13 +182,15 @@ export class MCPHandler {
     this.clientInfo = params.clientInfo;
     this.initialized = true;
 
-    debug(`Initialized with client: ${params.clientInfo.name} v${params.clientInfo.version}`);
+    log("INFO", `[MCP] Initialize called by client: ${params.clientInfo.name} v${params.clientInfo.version}`);
+    debug(`Initialize request params:`, params);
 
     return {
       protocolVersion: "2025-06-18",
       capabilities: {
         tools: { listChanged: true },
         resources: { list: false, read: false },
+        prompts: { listChanged: false }  // Explicitly declare no prompts support
       },
       serverInfo: {
         name: "intervals-mcp-server",
@@ -189,6 +200,7 @@ export class MCPHandler {
   }
 
   private async handleListTools(): Promise<ListToolsResponse> {
+    log("INFO", "[MCP] tools/list called - preparing tool list");
     debug("handleListTools called - preparing tool list");
     
     const intervalTools = [
@@ -314,6 +326,7 @@ export class MCPHandler {
     const allTools = [...intervalTools, ...UCR_TOOLS];
     const response = { tools: allTools };
     
+    log("INFO", `[MCP] Returning ${response.tools.length} tools (${intervalTools.length} interval + ${UCR_TOOLS.length} UCR)`);
     debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);
     debug("Tool names:", allTools.map(t => t.name).join(", "));
     return response;
@@ -321,6 +334,8 @@ export class MCPHandler {
 
   private async handleCallTool(params: CallToolRequest): Promise<CallToolResponse> {
     const { name, arguments: args = {} } = params;
+
+    log("INFO", `[MCP] tools/call invoked: ${name}`);
 
     try {
       let result: string;

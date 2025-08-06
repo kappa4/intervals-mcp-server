@@ -101,6 +101,11 @@ async function handler(req: Request): Promise<Response> {
 
   // Health check endpoint (no auth required)
   if (path === "/health") {
+    // Count available MCP tools
+    const intervalToolsCount = 5; // get_activities, get_activity, get_wellness, update_wellness, get_athlete_info
+    const ucrToolsCount = 5; // get_ucr_assessment, calculate_ucr_trends, update_wellness_assessment, check_ucr_setup, batch_calculate_ucr
+    const totalToolsCount = intervalToolsCount + ucrToolsCount;
+    
     return new Response(
       JSON.stringify({ 
         status: "healthy",
@@ -109,7 +114,12 @@ async function handler(req: Request): Promise<Response> {
         athlete_id: Deno.env.get("ATHLETE_ID"),
         timestamp: new Date().toISOString(),
         kv_enabled: true,
-        cache_enabled: Deno.env.get("CACHE_ENABLED") !== "false"
+        cache_enabled: Deno.env.get("CACHE_ENABLED") !== "false",
+        mcp_tools: {
+          total: totalToolsCount,
+          interval_tools: intervalToolsCount,
+          ucr_tools: ucrToolsCount
+        }
       }),
       { 
         headers: { 
