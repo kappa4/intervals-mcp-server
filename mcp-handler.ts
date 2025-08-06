@@ -365,6 +365,41 @@ export class MCPHandler {
             type: "object" as const,
             properties: {}
           }
+        },
+        {
+          name: "get_activity_intervals",
+          description: "Get intervals/laps data for a specific activity",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              activity_id: {
+                type: "string",
+                description: "The activity ID to get intervals for"
+              }
+            },
+            required: ["activity_id"]
+          }
+        },
+        {
+          name: "get_activity_streams",
+          description: "Get time-series stream data (heart rate, power, cadence, etc.) for a specific activity",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              activity_id: {
+                type: "string",
+                description: "The activity ID to get streams for"
+              },
+              types: {
+                type: "array",
+                items: {
+                  type: "string"
+                },
+                description: "Specific stream types to retrieve (e.g., 'heartrate', 'watts', 'cadence'). If not specified, all available streams are returned."
+              }
+            },
+            required: ["activity_id"]
+          }
         }
       ];
 
@@ -412,6 +447,12 @@ export class MCPHandler {
             break;
           case "get_athlete_info":
             result = await this.getAthleteInfo();
+            break;
+          case "get_activity_intervals":
+            result = await this.getActivityIntervals(args);
+            break;
+          case "get_activity_streams":
+            result = await this.getActivityStreams(args);
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -693,6 +734,117 @@ export class MCPHandler {
       result += `- Max HR: ${athlete.default_max_hr}bpm\n`;
     }
     
+    return result;
+  }
+
+  private async getActivityIntervals(args: any): Promise<string> {
+    const { activity_id } = args;
+    
+    if (!activity_id) {
+      throw new Error("activity_id is required");
+    }
+
+    const intervals = await this.intervalsClient.getActivityIntervals(activity_id);
+    
+    if (intervals.length === 0) {
+      return `No intervals/laps found for activity ${activity_id}.`;
+    }
+
+    let result = `Found ${intervals.length} intervals/laps for activity ${activity_id}:\n\n`;
+    
+    for (let i = 0; i < intervals.length; i++) {
+      const interval = intervals[i];
+      result += `**Interval ${i + 1}**`;
+      if (interval.name) result += `: ${interval.name}`;
+      result += `\n`;
+      
+      if (interval.distance !== undefined) {
+        result += `- Distance: ${(interval.distance / 1000).toFixed(2)}km\n`;
+      }
+      if (interval.moving_time !== undefined) {
+        const minutes = Math.floor(interval.moving_time / 60);
+        const seconds = interval.moving_time % 60;
+        result += `- Duration: ${minutes}:${seconds.toString().padStart(2, '0')}\n`;
+      }
+      if (interval.avg_power !== undefined || interval.average_watts !== undefined) {
+        const power = interval.avg_power || interval.average_watts;
+        result += `- Avg Power: ${power}W\n`;
+      }
+      if (interval.avg_heart_rate !== undefined || interval.average_heartrate !== undefined) {
+        const hr = interval.avg_heart_rate || interval.average_heartrate;
+        result += `- Avg HR: ${hr}bpm\n`;
+      }
+      if (interval.avg_cadence !== undefined) {
+        result += `- Avg Cadence: ${interval.avg_cadence}rpm\n`;
+      }
+      if (interval.avg_speed !== undefined) {
+        result += `- Avg Speed: ${(interval.avg_speed * 3.6).toFixed(1)}km/h\n`;
+      }
+      if (interval.intensity) {
+        result += `- Intensity: ${interval.intensity}\n`;
+      }
+      if (interval.type) {
+        result += `- Type: ${interval.type}\n`;
+      }
+      
+      result += "\n";
+    }
+
+    return result;
+  }
+
+  private async getActivityStreams(args: any): Promise<string> {
+    const { activity_id, types } = args;
+    
+    if (!activity_id) {
+      throw new Error("activity_id is required");
+    }
+
+    const streams = await this.intervalsClient.getActivityStreams(activity_id, types);
+    
+    const availableStreams = Object.keys(streams).filter(key => 
+      streams[key] && Array.isArray(streams[key]) && streams[key].length > 0
+    );
+
+    if (availableStreams.length === 0) {
+      return `No stream data found for activity ${activity_id}.`;
+    }
+
+    let result = `**Stream Data for Activity ${activity_id}**\n\n`;
+    result += `Available streams: ${availableStreams.join(', ')}\n\n`;
+
+    for (const streamType of availableStreams) {
+      const data = streams[streamType];
+      result += `**${streamType}**:\n`;
+      
+      if (Array.isArray(data) && data.length > 0) {
+        result += `- Data points: ${data.length}\n`;
+        
+        // Calculate basic statistics for numeric streams
+        if (typeof data[0] === 'number') {
+          const numData = data as number[];
+          const min = Math.min(...numData);
+          const max = Math.max(...numData);
+          const avg = numData.reduce((a, b) => a + b, 0) / numData.length;
+          
+          result += `- Min: ${min.toFixed(1)}\n`;
+          result += `- Max: ${max.toFixed(1)}\n`;
+          result += `- Avg: ${avg.toFixed(1)}\n`;
+          
+          // Show first and last few data points as sample
+          const sampleSize = 5;
+          if (data.length > sampleSize * 2) {
+            result += `- Sample (first ${sampleSize}): ${numData.slice(0, sampleSize).map(v => v.toFixed(1)).join(', ')}\n`;
+            result += `- Sample (last ${sampleSize}): ${numData.slice(-sampleSize).map(v => v.toFixed(1)).join(', ')}\n`;
+          } else {
+            result += `- Data: ${numData.map(v => v.toFixed(1)).join(', ')}\n`;
+          }
+        }
+      }
+      
+      result += "\n";
+    }
+
     return result;
   }
 

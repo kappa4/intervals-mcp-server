@@ -176,3 +176,51 @@ export interface IntervalsCustomItem {
   created?: string;
   updated?: string;
 }
+
+export interface ActivityInterval {
+  id?: number;
+  start_index: number;
+  end_index: number;
+  distance?: number;
+  moving_time?: number;
+  elapsed_time?: number;
+  avg_speed?: number;
+  avg_power?: number;
+  avg_heart_rate?: number;
+  avg_cadence?: number;
+  max_power?: number;
+  max_heart_rate?: number;
+  normalized_power?: number;
+  intensity?: string;
+  name?: string;
+  type?: string;
+  label?: string;
+  average_watts?: number;
+  average_heartrate?: number;
+  max_watts?: number;
+  max_heartrate?: number;
+  [key: string]: any;
+}
+
+export interface ActivityStreamData {
+  type: string;
+  data: number[];
+  resolution?: string;
+  series_type?: string;
+  original_size?: number;
+  [key: string]: any;
+}
+
+export interface ActivityStreamsResponse {
+  time?: number[];
+  heartrate?: number[];
+  watts?: number[];
+  cadence?: number[];
+  altitude?: number[];
+  velocity_smooth?: number[];
+  grade_smooth?: number[];
+  temp?: number[];
+  distance?: number[];
+  latlng?: [number, number][];
+  [key: string]: any;
+}

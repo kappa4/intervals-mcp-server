@@ -17,6 +17,8 @@ import type {
   WellnessFilters,
   EventFilters,
   IntervalsCustomItem,
+  ActivityInterval,
+  ActivityStreamsResponse,
 } from "./intervals-types.ts";
 
 export class IntervalsAPIClient {
@@ -36,7 +38,10 @@ export class IntervalsAPIClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseUrl}/api/v1/athlete/${this.athleteId}${endpoint}`;
+    // Check if endpoint already starts with /activity/ (for new endpoints)
+    const url = endpoint.startsWith('/activity/') 
+      ? `${this.baseUrl}/api/v1${endpoint}`
+      : `${this.baseUrl}/api/v1/athlete/${this.athleteId}${endpoint}`;
     
     const headers = {
       "Authorization": `Basic ${btoa(`API_KEY:${this.apiKey}`)}`,
@@ -240,5 +245,61 @@ export class IntervalsAPIClient {
     const items = await this.getCustomItems();
     // Filter for ACTIVITY_FIELD type
     return items.filter(item => item.type === 'ACTIVITY_FIELD');
+  }
+
+  // Activity Intervals
+  async getActivityIntervals(activityId: string): Promise<ActivityInterval[]> {
+    try {
+      // Use the activity endpoint directly (not under athlete)
+      const response = await this.makeRequest<any>(`/activity/${activityId}/intervals`);
+      
+      // The response contains icu_intervals array
+      if (response && response.icu_intervals) {
+        return response.icu_intervals;
+      }
+      
+      // Fallback if the format is different
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      return [];
+    } catch (error) {
+      if (getErrorMessage(error).includes('404')) {
+        throw new Error(`Intervals for activity ${activityId} not found. This could mean the activity doesn't have intervals/laps data.`);
+      }
+      throw error;
+    }
+  }
+
+  // Activity Streams
+  async getActivityStreams(activityId: string, types?: string[]): Promise<ActivityStreamsResponse> {
+    try {
+      const searchParams = new URLSearchParams();
+      if (types && types.length > 0) {
+        searchParams.set("types", types.join(","));
+      }
+      
+      const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+      // Use the activity endpoint directly (not under athlete)
+      const streamArray = await this.makeRequest<Array<{type: string, data: number[]}>>(`/activity/${activityId}/streams.json${query}`);
+      
+      // Convert array format to object format
+      const result: ActivityStreamsResponse = {};
+      if (Array.isArray(streamArray)) {
+        for (const stream of streamArray) {
+          if (stream.type && stream.data) {
+            result[stream.type] = stream.data;
+          }
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      if (getErrorMessage(error).includes('404')) {
+        throw new Error(`Streams for activity ${activityId} not found. This could mean the activity doesn't have stream data.`);
+      }
+      throw error;
+    }
   }
 }
