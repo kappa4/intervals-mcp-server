@@ -147,14 +147,16 @@ export class MCPHandler {
           }
           return this.createResponse(request.id, {});
         case "notifications/cancelled":
-          // Handle cancellation notification
-          debug("Client sent cancelled notification");
-          if (!request.id) {
-            // Notifications don't have id, so return nothing
-            // This will be handled by the HTTP handler to return 202 Accepted
-            return null as any;
-          }
-          return this.createResponse(request.id, {});
+          // Handle cancellation notification per MCP spec
+          const cancelParams = request.params as { requestId: string; reason?: string };
+          debug(`Client sent cancellation for request ${cancelParams.requestId}: ${cancelParams.reason || 'No reason provided'}`);
+          
+          // Log cancellation for debugging as per spec
+          log("INFO", `[MCP] Request ${cancelParams.requestId} cancelled: ${cancelParams.reason || 'No reason'}`);
+          
+          // Notifications don't have id and don't require response
+          // Return null to signal 202 Accepted should be sent
+          return null as any;
         case "tools/list":
           result = await this.handleListTools();
           break;
