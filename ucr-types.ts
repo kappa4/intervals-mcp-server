@@ -252,3 +252,36 @@ export interface UCRCalculationOptions {
   skipTrendAnalysis?: boolean;
   customConfig?: Partial<UCRConfig>;
 }
+
+// ========================================
+// 相関分析
+// ========================================
+
+export interface CorrelationResult {
+  metric: string;              // 分析対象の主観指標名
+  optimalLag: number;          // 最適ラグ日数（負=過去、正=未来）
+  correlation: number;         // 相関係数 (r値)
+  pValue?: number;             // 統計的有意性
+  interpretation: string;      // 日本語での解釈
+  dataPoints: number;          // 分析に使用したデータ点数
+  lagCorrelations?: Map<number, number>; // 各ラグでの相関係数
+}
+
+export interface UCRComponentsDetailed extends UCRComponents {
+  objectiveReadinessScore: number;  // HRV + RHR + 睡眠のみ（0-80点）
+  subjectiveScore: number;           // 主観スコア（0-20点）
+  totalBaseScore: number;            // 修正前の合計スコア（0-100点）
+}
+
+export interface UCRAnalysisResult {
+  date: string;
+  components: UCRComponentsDetailed;
+  modifiers: UCRModifiers;
+  multiplier: number;
+  finalScore: number;
+  interpretation: {
+    dominantFactors: string[];      // 主要な影響要因
+    limitingFactors: string[];      // 制限要因
+    suggestions: string[];           // 改善提案
+  };
+}
