@@ -187,6 +187,30 @@ export const UCR_TOOLS: MCPTool[] = [
         }
       }
     }
+  },
+  {
+    name: "get_ucr_decomposition",
+    description: "UCRスコアの完全な要因分解。なぜ今日のスコアがこの値なのか、ベーススコアからの変動要因を詳細に分析し、物語として解釈します。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          description: "評価日（YYYY-MM-DD形式、省略時は今日）",
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        include_narrative: {
+          type: "boolean",
+          description: "スコアの物語的解釈を含むか（デフォルト: true）",
+          default: true
+        },
+        compare_yesterday: {
+          type: "boolean",
+          description: "前日との比較を含むか（デフォルト: true）",
+          default: true
+        }
+      }
+    }
   }
 ];
 
@@ -223,6 +247,9 @@ export class UCRToolHandler {
         
         case "analyze_ucr_correlations":
           return await this.handleAnalyzeUCRCorrelations(args);
+        
+        case "get_ucr_decomposition":
+          return await this.handleGetUCRDecomposition(args);
         
         default:
           throw new Error(`Unknown UCR tool: ${toolName}`);
@@ -804,5 +831,403 @@ export class UCRToolHandler {
     }
 
     return recommendations;
+  }
+
+  private async handleGetUCRDecomposition(args: any) {
+    const date = args.date || new Date().toISOString().split('T')[0];
+    const includeNarrative = args.include_narrative !== false;
+    const compareYesterday = args.compare_yesterday !== false;
+
+    try {
+      // 今日のUCR評価を取得
+      const assessment = await this.client.calculateUCRAssessment(date, false);
+      if (!assessment) {
+        return {
+          success: false,
+          error: "UCR計算に失敗しました",
+          date
+        };
+      }
+
+      // 前日のデータを取得（比較用）
+      let yesterdayAssessment = null;
+      if (compareYesterday) {
+        const yesterday = new Date(date);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        try {
+          yesterdayAssessment = await this.client.calculateUCRAssessment(yesterdayStr, false);
+        } catch (error) {
+          log("WARN", `Failed to get yesterday's UCR: ${getErrorMessage(error)}`);
+        }
+      }
+
+      // 詳細コンポーネントの生成
+      const detailedComponents = this.correlationAnalyzer.createDetailedComponents(
+        assessment.components
+      );
+
+      // 要因分解の作成
+      const decomposition = this.createDecomposition(
+        assessment,
+        detailedComponents,
+        yesterdayAssessment
+      );
+
+      // ナラティブ解釈の生成
+      let narrative = null;
+      if (includeNarrative) {
+        narrative = this.generateNarrative(
+          assessment,
+          detailedComponents,
+          decomposition,
+          yesterdayAssessment
+        );
+      }
+
+      return {
+        success: true,
+        date,
+        final_score: assessment.score,
+        base_score: assessment.baseScore,
+        decomposition,
+        narrative,
+        comparison: compareYesterday && yesterdayAssessment ? {
+          yesterday_score: yesterdayAssessment.score,
+          change: assessment.score - yesterdayAssessment.score,
+          change_percentage: Math.round(((assessment.score - yesterdayAssessment.score) / yesterdayAssessment.score) * 100),
+          component_changes: this.compareComponents(assessment.components, yesterdayAssessment.components)
+        } : null
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+        date
+      };
+    }
+  }
+
+  private createDecomposition(assessment: any, components: UCRComponentsDetailed, yesterdayAssessment: any) {
+    const decomposition: any = {
+      base_components: {
+        hrv: {
+          score: components.hrv,
+          max_score: 40,
+          contribution_percentage: Math.round((components.hrv / assessment.baseScore) * 100),
+          status: this.getComponentStatus(components.hrv, 40)
+        },
+        rhr: {
+          score: components.rhr,
+          max_score: 25,
+          contribution_percentage: Math.round((components.rhr / assessment.baseScore) * 100),
+          status: this.getComponentStatus(components.rhr, 25)
+        },
+        sleep: {
+          score: components.sleep,
+          max_score: 15,
+          contribution_percentage: Math.round((components.sleep / assessment.baseScore) * 100),
+          status: this.getComponentStatus(components.sleep, 15)
+        },
+        subjective: {
+          score: components.subjective,
+          max_score: 20,
+          contribution_percentage: Math.round((components.subjective / assessment.baseScore) * 100),
+          status: this.getComponentStatus(components.subjective, 20)
+        }
+      },
+      modifiers: [],
+      total_modifier_impact: 1.0,
+      score_adjustment: assessment.score - assessment.baseScore
+    };
+
+    // 修正因子の詳細を追加
+    if (assessment.modifiers) {
+      Object.entries(assessment.modifiers).forEach(([key, modifier]: [string, any]) => {
+        if (modifier && modifier.applied) {
+          decomposition.modifiers.push({
+            type: this.getModifierJapaneseName(key),
+            reason: modifier.reason,
+            impact: modifier.value,
+            effect_percentage: Math.round((1 - modifier.value) * 100)
+          });
+          decomposition.total_modifier_impact *= modifier.value;
+        }
+      });
+    }
+
+    // 主要な変動要因を特定
+    decomposition.primary_factors = this.identifyPrimaryFactors(decomposition);
+
+    return decomposition;
+  }
+
+  private getComponentStatus(score: number, maxScore: number): string {
+    const percentage = (score / maxScore) * 100;
+    if (percentage >= 90) return "優秀";
+    if (percentage >= 75) return "良好";
+    if (percentage >= 60) return "標準";
+    if (percentage >= 40) return "低下";
+    return "要注意";
+  }
+
+  private identifyPrimaryFactors(decomposition: any): any {
+    const factors: any = {
+      positive: [],
+      negative: [],
+      dominant: null
+    };
+
+    // 各コンポーネントの寄与度を評価
+    Object.entries(decomposition.base_components).forEach(([name, component]: [string, any]) => {
+      const percentage = (component.score / component.max_score) * 100;
+      if (percentage >= 75) {
+        factors.positive.push({
+          name: this.getComponentJapaneseName(name),
+          percentage: Math.round(percentage)
+        });
+      } else if (percentage < 50) {
+        factors.negative.push({
+          name: this.getComponentJapaneseName(name),
+          percentage: Math.round(percentage)
+        });
+      }
+    });
+
+    // 最も影響力のある要因を特定
+    let maxContribution = 0;
+    let dominantComponent = null;
+    Object.entries(decomposition.base_components).forEach(([name, component]: [string, any]) => {
+      if (component.contribution_percentage > maxContribution) {
+        maxContribution = component.contribution_percentage;
+        dominantComponent = name;
+      }
+    });
+
+    if (dominantComponent) {
+      factors.dominant = {
+        name: this.getComponentJapaneseName(dominantComponent),
+        contribution: maxContribution
+      };
+    }
+
+    return factors;
+  }
+
+  private getComponentJapaneseName(name: string): string {
+    const names: { [key: string]: string } = {
+      hrv: "HRV（心拍変動）",
+      rhr: "RHR（安静時心拍数）",
+      sleep: "睡眠",
+      subjective: "主観的評価"
+    };
+    return names[name] || name;
+  }
+
+  private generateNarrative(
+    assessment: any,
+    components: UCRComponentsDetailed,
+    decomposition: any,
+    yesterdayAssessment: any
+  ): any {
+    const narrative: any = {
+      summary: "",
+      details: [],
+      insights: [],
+      recommendations: []
+    };
+
+    // サマリーの生成
+    narrative.summary = this.createSummaryNarrative(assessment, decomposition);
+
+    // 詳細説明の生成
+    narrative.details = this.createDetailedNarrative(decomposition);
+
+    // 洞察の生成
+    narrative.insights = this.createInsights(assessment, components, decomposition);
+
+    // 推奨事項の生成
+    narrative.recommendations = this.createRecommendations(assessment, decomposition);
+
+    // 前日比較の物語
+    if (yesterdayAssessment) {
+      narrative.comparison = this.createComparisonNarrative(
+        assessment,
+        yesterdayAssessment
+      );
+    }
+
+    return narrative;
+  }
+
+  private createSummaryNarrative(assessment: any, decomposition: any): string {
+    const score = assessment.score;
+    const zone = assessment.recommendation.name;
+    
+    let summary = `今日のUCRスコアは${score}点で、${zone}ゾーンにあります。`;
+    
+    // 主要な要因を追加
+    if (decomposition.primary_factors.dominant) {
+      summary += `${decomposition.primary_factors.dominant.name}が最も大きく寄与しています（${decomposition.primary_factors.dominant.contribution}%）。`;
+    }
+    
+    // 修正因子の影響を追加
+    if (decomposition.modifiers.length > 0) {
+      const totalImpact = Math.round((1 - decomposition.total_modifier_impact) * 100);
+      summary += `修正因子により${totalImpact}%の調整が適用されています。`;
+    }
+    
+    return summary;
+  }
+
+  private createDetailedNarrative(decomposition: any): string[] {
+    const details: string[] = [];
+    
+    // 各コンポーネントの詳細
+    Object.entries(decomposition.base_components).forEach(([name, component]: [string, any]) => {
+      const componentName = this.getComponentJapaneseName(name);
+      const percentage = Math.round((component.score / component.max_score) * 100);
+      details.push(
+        `${componentName}: ${component.score.toFixed(1)}/${component.max_score}点（${percentage}%、${component.status}）`
+      );
+    });
+    
+    // 修正因子の詳細
+    if (decomposition.modifiers.length > 0) {
+      decomposition.modifiers.forEach((modifier: any) => {
+        details.push(
+          `${modifier.type}による調整: ${modifier.effect_percentage}%減（${modifier.reason}）`
+        );
+      });
+    }
+    
+    return details;
+  }
+
+  private createInsights(assessment: any, components: UCRComponentsDetailed, decomposition: any): string[] {
+    const insights: string[] = [];
+    
+    // 客観vs主観のバランス
+    const objectivePercent = (components.objectiveReadinessScore / 80) * 100;
+    const subjectivePercent = (components.subjectiveScore / 20) * 100;
+    const gap = Math.abs(objectivePercent - subjectivePercent);
+    
+    if (gap > 30) {
+      if (objectivePercent > subjectivePercent) {
+        insights.push("身体的指標は良好ですが、主観的な疲労感があります。メンタル面のケアが重要です。");
+      } else {
+        insights.push("主観的には元気ですが、身体は疲労しています。無理をせず回復を優先してください。");
+      }
+    }
+    
+    // 制限要因の特定
+    if (decomposition.primary_factors.negative.length > 0) {
+      const limitingFactors = decomposition.primary_factors.negative
+        .map((f: any) => `${f.name}（${f.percentage}%）`)
+        .join("、");
+      insights.push(`${limitingFactors}が現在のパフォーマンスを制限しています。`);
+    }
+    
+    // 強みの特定
+    if (decomposition.primary_factors.positive.length > 0) {
+      const strengths = decomposition.primary_factors.positive
+        .map((f: any) => f.name)
+        .join("、");
+      insights.push(`${strengths}は良好な状態を維持しています。`);
+    }
+    
+    return insights;
+  }
+
+  private createRecommendations(assessment: any, decomposition: any): string[] {
+    const recommendations: string[] = [];
+    const score = assessment.score;
+    
+    // スコアベースの推奨
+    if (score >= 85) {
+      recommendations.push("高強度トレーニングに最適な状態です。計画的な負荷をかけることができます。");
+    } else if (score >= 70) {
+      recommendations.push("通常のトレーニングが可能です。体調を観察しながら実施してください。");
+    } else if (score >= 50) {
+      recommendations.push("軽度のトレーニングに留めてください。回復を優先することが重要です。");
+    } else {
+      recommendations.push("積極的な回復が必要です。十分な休息と栄養補給を心がけてください。");
+    }
+    
+    // 制限要因に基づく推奨
+    decomposition.primary_factors.negative.forEach((factor: any) => {
+      const name = factor.name;
+      if (name.includes("HRV")) {
+        recommendations.push("HRVが低下しています。ストレス管理と副交感神経の活性化（深呼吸、瞑想）を実践してください。");
+      } else if (name.includes("RHR")) {
+        recommendations.push("安静時心拍数が上昇しています。十分な水分補給と休息を確保してください。");
+      } else if (name.includes("睡眠")) {
+        recommendations.push("睡眠の質を改善する必要があります。就寝時間を一定にし、睡眠環境を整えてください。");
+      } else if (name.includes("主観")) {
+        recommendations.push("主観的な疲労を感じています。メンタルケアとリラクゼーションを重視してください。");
+      }
+    });
+    
+    return recommendations;
+  }
+
+  private createComparisonNarrative(current: any, yesterday: any): string {
+    const change = current.score - yesterday.score;
+    const changeAbs = Math.abs(change);
+    
+    let narrative = "";
+    
+    if (changeAbs < 3) {
+      narrative = "昨日とほぼ同じ状態を維持しています。";
+    } else if (change > 0) {
+      narrative = `昨日より${changeAbs}点改善しました。`;
+      if (change > 10) {
+        narrative += "顕著な回復が見られます。";
+      } else if (change > 5) {
+        narrative += "良好な回復傾向です。";
+      } else {
+        narrative += "緩やかな改善が見られます。";
+      }
+    } else {
+      narrative = `昨日より${changeAbs}点低下しました。`;
+      if (changeAbs > 10) {
+        narrative += "大幅な低下です。休息を優先してください。";
+      } else if (changeAbs > 5) {
+        narrative += "注意が必要な低下です。";
+      } else {
+        narrative += "軽度の低下です。経過を観察してください。";
+      }
+    }
+    
+    return narrative;
+  }
+
+  private compareComponents(current: any, yesterday: any): any {
+    return {
+      hrv: {
+        current: current.hrv,
+        yesterday: yesterday.hrv,
+        change: current.hrv - yesterday.hrv,
+        change_percentage: Math.round(((current.hrv - yesterday.hrv) / yesterday.hrv) * 100)
+      },
+      rhr: {
+        current: current.rhr,
+        yesterday: yesterday.rhr,
+        change: current.rhr - yesterday.rhr,
+        change_percentage: Math.round(((current.rhr - yesterday.rhr) / yesterday.rhr) * 100)
+      },
+      sleep: {
+        current: current.sleep,
+        yesterday: yesterday.sleep,
+        change: current.sleep - yesterday.sleep,
+        change_percentage: Math.round(((current.sleep - yesterday.sleep) / yesterday.sleep) * 100)
+      },
+      subjective: {
+        current: current.subjective,
+        yesterday: yesterday.subjective,
+        change: current.subjective - yesterday.subjective,
+        change_percentage: Math.round(((current.subjective - yesterday.subjective) / yesterday.subjective) * 100)
+      }
+    };
   }
 }
