@@ -7,6 +7,7 @@ import { log, debug, warn, error } from "./logger.ts";
 import { IntervalsAPIClient } from "./intervals-client.ts";
 import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
 import { UCRToolHandler, UCR_TOOLS } from "./ucr-tools.ts";
+import { UCR_PROMPTS, generatePromptTemplate } from "./ucr-prompts.ts";
 import type {
   MCPRequest,
   MCPResponse,
@@ -190,6 +191,12 @@ export class MCPHandler {
         case "resources/read":
           result = await this.handleReadResource(request.params as ReadResourceRequest);
           break;
+        case "prompts/list":
+          result = await this.handleListPrompts();
+          break;
+        case "prompts/get":
+          result = await this.handleGetPrompt(request.params as any);
+          break;
         default:
           throw this.createError(MCP_ERROR_CODES.METHOD_NOT_FOUND, `Method ${request.method} not found`);
       }
@@ -228,7 +235,7 @@ export class MCPHandler {
       capabilities: {
         tools: { listChanged: true },
         resources: { list: false, read: false },
-        prompts: { listChanged: false }  // Explicitly declare no prompts support
+        prompts: { listChanged: true }  // Enable prompts support
       },
       serverInfo: {
         name: "intervals-mcp-server",
@@ -971,5 +978,60 @@ export class MCPHandler {
 
   private createError(code: number, message: string, data?: any): MCPError {
     return { code, message, data };
+  }
+
+  private async handleListPrompts(): Promise<any> {
+    log("INFO", "[MCP] prompts/list called");
+    
+    const prompts = UCR_PROMPTS.map(prompt => ({
+      name: prompt.name,
+      description: prompt.description,
+      arguments: prompt.arguments?.map(arg => ({
+        name: arg.name,
+        description: arg.description,
+        required: arg.required
+      }))
+    }));
+
+    return { prompts };
+  }
+
+  private async handleGetPrompt(params: { name: string; arguments?: Record<string, any> }): Promise<any> {
+    log("INFO", `[MCP] prompts/get called for prompt: ${params.name}`);
+    
+    const promptDef = UCR_PROMPTS.find(p => p.name === params.name);
+    if (!promptDef) {
+      throw this.createError(MCP_ERROR_CODES.INVALID_PARAMS, `Prompt ${params.name} not found`);
+    }
+
+    try {
+      // プロンプトテンプレートを生成
+      const template = generatePromptTemplate(params.name, params.arguments);
+      
+      // プロンプトメッセージを構築
+      const messages = [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: template
+          }
+        }
+      ];
+
+      return {
+        prompt: {
+          name: params.name,
+          description: promptDef.description,
+          arguments: promptDef.arguments,
+          messages
+        }
+      };
+    } catch (error) {
+      throw this.createError(
+        MCP_ERROR_CODES.INTERNAL_ERROR,
+        `Failed to generate prompt: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 }
