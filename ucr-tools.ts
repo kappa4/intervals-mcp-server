@@ -31,8 +31,8 @@ export const UCR_TOOLS: MCPTool[] = [
         },
         update_intervals: {
           type: "boolean", 
-          description: "計算結果をintervals.icuのカスタムフィールドに保存するか（デフォルト: false）",
-          default: false
+          description: "計算結果をintervals.icuのカスタムフィールドに保存するか（デフォルト: true）",
+          default: true
         }
       }
     }
@@ -240,7 +240,7 @@ export class UCRToolHandler {
   private async handleGetUCRAssessment(args: any) {
     const date = args.date || new Date().toISOString().split('T')[0];
     const includeTrends = args.include_trends !== false;
-    const updateIntervals = args.update_intervals === true;
+    const updateIntervals = args.update_intervals !== false;
 
     log("INFO", `Getting UCR assessment for ${date}, trends: ${includeTrends}, update: ${updateIntervals}`);
 
