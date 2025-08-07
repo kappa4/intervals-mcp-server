@@ -371,20 +371,27 @@ export class UCRCalculator {
     const sleepScore = current.sleepScore || 0;
     const sleepHours = current.sleepHours || 0;
 
-    // 最小睡眠時間未満は0点
-    if (sleepHours < this.config.sleep.minHours && sleepHours > 0) {
-      return 0;
-    }
-
     // データなしはデフォルト値
     if (sleepScore === 0 && sleepHours === 0) {
       return this.config.scoreWeights.sleep * 0.5;
     }
 
+    // 睡眠時間が短い場合でも部分的な回復効果を反映
+    // 最小睡眠時間未満の場合は、睡眠時間に応じた減衰係数を適用
+    let adjustmentFactor = 1.0;
+    if (sleepHours > 0 && sleepHours < this.config.sleep.minHours) {
+      // 例: 最小6時間で、4時間睡眠なら 4/6 = 0.67倍
+      // さらに睡眠不足のペナルティとして0.8を掛ける（最大で0.8倍）
+      adjustmentFactor = (sleepHours / this.config.sleep.minHours) * 0.8;
+    }
+
     // Garmin睡眠スコアの線形スケーリング (0-100を0-20にマップ)
     // 負の値は0にクリップ、100超は100にクリップ
     const clippedScore = Math.max(0, Math.min(100, sleepScore));
-    return (clippedScore / 100) * this.config.scoreWeights.sleep;
+    const baseScore = (clippedScore / 100) * this.config.scoreWeights.sleep;
+
+    // 調整係数を適用（短時間睡眠の場合はスコアが減少）
+    return baseScore * adjustmentFactor;
   }
 
   private calculateSubjectiveScore(subjectiveData: any): number {

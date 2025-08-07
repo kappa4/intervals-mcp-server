@@ -107,19 +107,25 @@ describe("Sleep Score Linear Scaling", () => {
     }
   });
 
-  it("should handle sleep hour constraints", () => {
-    // Test minimum sleep hours threshold
+  it("should handle sleep hour constraints with partial recovery", () => {
+    // Test minimum sleep hours threshold with partial recovery effect
     const minHours = config.sleep.minHours;
     
-    // Below minimum hours should yield 0
+    // Below minimum hours should yield reduced score (not 0)
     if (minHours > 0) {
-      const belowMinInput = createTestDataWithSleep(80, minHours - 0.5);
+      const belowMinInput = createTestDataWithSleep(80, minHours - 2); // e.g., 4 hours if min is 6
       const belowMinResult = calculator.calculate(belowMinInput);
       
-      assertEquals(
+      // Expected: base score * (actual_hours / min_hours) * 0.8
+      const baseScore = (80 / 100) * config.scoreWeights.sleep;
+      const adjustmentFactor = ((minHours - 2) / minHours) * 0.8;
+      const expectedBelowMin = baseScore * adjustmentFactor;
+      
+      assertAlmostEquals(
         belowMinResult.components.sleep,
-        0,
-        `Sleep score should be 0 when sleep hours (${minHours - 0.5}) are below minimum (${minHours})`
+        expectedBelowMin,
+        0.01,
+        `Sleep score should be reduced but not 0 when sleep hours (${minHours - 2}) are below minimum (${minHours})`
       );
     }
     
@@ -288,7 +294,7 @@ describe("Sleep Score Linear Scaling", () => {
     }
   });
 
-  it("should handle sleep hours edge cases", () => {
+  it("should handle sleep hours edge cases with partial recovery", () => {
     // Test various sleep hour scenarios
     const sleepHourTests = [
       { hours: 0, score: 80, description: "No sleep" },
@@ -304,10 +310,16 @@ describe("Sleep Score Linear Scaling", () => {
       const result = calculator.calculate(input);
       
       if (test.hours < config.sleep.minHours && test.hours > 0) {
-        assertEquals(
+        // Should yield reduced score with partial recovery
+        const baseScore = (test.score / 100) * config.scoreWeights.sleep;
+        const adjustmentFactor = (test.hours / config.sleep.minHours) * 0.8;
+        const expectedScore = baseScore * adjustmentFactor;
+        
+        assertAlmostEquals(
           result.components.sleep,
-          0,
-          `Should yield 0 for ${test.description} (${test.hours}h < ${config.sleep.minHours}h minimum)`
+          expectedScore,
+          0.01,
+          `Should yield reduced score for ${test.description} (${test.hours}h < ${config.sleep.minHours}h minimum)`
         );
       } else if (test.hours === 0 && test.score === 0) {
         // No data case
