@@ -43,3 +43,7 @@ kv.db-wal
 .test-token
 test-report-*.md
 .oauth-token
+
+# Test scripts (temporary/development)
+test_*.ts
+!tests/**/*_test.ts
