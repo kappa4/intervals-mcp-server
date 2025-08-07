@@ -41,8 +41,8 @@ export interface UCRCalculationInput {
 
 export interface UCRComponents {
   hrv: number;    // 0-40
-  rhr: number;    // 0-20
-  sleep: number;  // 0-20
+  rhr: number;    // 0-25 (HRV二重計上補正のため20→25へ増加)
+  sleep: number;  // 0-15 (Garmin内HRV成分の重複削減のため20→15へ削減)
   subjective: number; // 0-20
 }
 

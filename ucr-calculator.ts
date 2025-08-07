@@ -41,8 +41,8 @@ const DEFAULT_UCR_CONFIG: UCRConfig = {
     baselineDays: 30,
     thresholdSd: 1.0,
     linear: {
-      baseline: 14,
-      slope: 6
+      baseline: 17.5,  // 14 → 17.5: 25点満点の70%ベースライン (20点の70%=14 → 25点の70%=17.5)
+      slope: 7.5       // 6 → 7.5: 25点満点に対応した傾き (20点の30%/SD=6 → 25点の30%/SD=7.5)
     }
   },
   sleep: {
@@ -52,8 +52,8 @@ const DEFAULT_UCR_CONFIG: UCRConfig = {
   },
   scoreWeights: {
     hrv: 40,
-    rhr: 20,
-    sleep: 20,
+    rhr: 25,    // 20 → 25: HRV二重計上補正のため増加
+    sleep: 15,  // 20 → 15: Garmin睡眠スコア内のHRV成分による重複を削減
     subjective: 20
   },
   penalties: {
@@ -363,7 +363,7 @@ export class UCRCalculator {
     // 線形関数マッピング
     const score = this.config.rhr.linear.baseline + (zScore * this.config.rhr.linear.slope);
     
-    // 0-20の範囲にクリップ
+    // 0-25の範囲にクリップ（HRV二重計上補正後の新配点）
     return Math.max(0, Math.min(this.config.scoreWeights.rhr, score));
   }
 

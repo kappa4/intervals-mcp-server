@@ -476,13 +476,13 @@ export class UCRToolHandler {
           },
           rhr: {
             score: detailedComponents.rhr,
-            max_score: 20,
-            percentage: Math.round((detailedComponents.rhr / 20) * 100)
+            max_score: 25,
+            percentage: Math.round((detailedComponents.rhr / 25) * 100)
           },
           sleep: {
             score: detailedComponents.sleep,
-            max_score: 20,
-            percentage: Math.round((detailedComponents.sleep / 20) * 100)
+            max_score: 15,
+            percentage: Math.round((detailedComponents.sleep / 15) * 100)
           },
           subjective: {
             score: detailedComponents.subjective,
@@ -654,8 +654,8 @@ export class UCRToolHandler {
     // 各コンポーネントの寄与度を評価
     const componentScores = [
       { name: "HRV", score: components.hrv, max: 40 },
-      { name: "RHR", score: components.rhr, max: 20 },
-      { name: "睡眠", score: components.sleep, max: 20 },
+      { name: "RHR", score: components.rhr, max: 25 },  // HRV二重計上補正
+      { name: "睡眠", score: components.sleep, max: 15 },  // Garmin内HRV成分の重複削減
       { name: "主観", score: components.subjective, max: 20 }
     ];
 
