@@ -222,6 +222,12 @@ curl -X GET "http://localhost:8001/api/v1/activities/ACTIVITY_ID/streams" \
    - メソッドバインディング: `map(this.method)` → `map(a => this.method(a))`
    - Deno KV undefined: `private kv: Deno.Kv` → `private kv?: Deno.Kv`
    - 重複メソッド定義: 同名メソッドの整理・削除
+6. **ChatGPT Actions認証**:
+   - APIキー使用時は`Header name: X-API-Key`の明示的指定が必須
+   - Bearer認証とAPIキー認証の混在に注意
+7. **intervals.icu API streams**:
+   - 正しいパス: `/api/v1/activity/{id}/streams`（athleteパス不要）
+   - MCPとChatGPT Actions両方で1秒ごとの生データ取得可能
 
 ### デバッグコマンド
 ```bash
