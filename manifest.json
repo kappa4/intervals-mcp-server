@@ -1,0 +1,94 @@
+{
+  "name": "intervals-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Intervals.icu with UCR (Unified Continuous Readiness) assessment and ChatGPT integration",
+  "author": "kappa4",
+  "license": "MIT",
+  "homepage": "https://github.com/kappa4/intervals-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kappa4/intervals-mcp-server.git"
+  },
+  "mcp": {
+    "version": "2024-11-05",
+    "transport": ["sse", "stdio"],
+    "capabilities": {
+      "tools": true,
+      "resources": true,
+      "prompts": true
+    },
+    "requiredTools": ["search", "fetch"],
+    "authentication": {
+      "type": "oauth2",
+      "flow": "authorization_code",
+      "authorizationUrl": "${ORIGIN}/oauth/authorize",
+      "tokenUrl": "${ORIGIN}/oauth/token",
+      "scopes": {
+        "read": "Read access to intervals.icu data",
+        "write": "Write access to wellness data"
+      }
+    }
+  },
+  "chatgpt": {
+    "enabled": true,
+    "displayName": "Intervals.icu MCP",
+    "description": "Access your Intervals.icu training data, wellness metrics, and UCR assessments directly in ChatGPT",
+    "icon": "https://www.intervals.icu/assets/i_logo.png",
+    "categories": ["fitness", "health", "sports", "training"],
+    "supportedSubscriptions": ["Pro", "Team", "Enterprise", "Edu"],
+    "features": {
+      "deepResearch": true,
+      "connectors": true
+    }
+  },
+  "environment": {
+    "required": [
+      "ATHLETE_ID",
+      "API_KEY",
+      "JWT_SECRET_KEY",
+      "ORIGIN"
+    ],
+    "optional": [
+      "LOG_LEVEL",
+      "PORT",
+      "BASE_URL"
+    ]
+  },
+  "deployment": {
+    "platform": "deno-deploy",
+    "runtime": "deno",
+    "entrypoint": "main.ts"
+  },
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search for activities, wellness data, or UCR assessments",
+      "required": true
+    },
+    {
+      "name": "fetch",
+      "description": "Fetch specific data by ID or date",
+      "required": true
+    },
+    {
+      "name": "get_ucr_assessment",
+      "description": "Get UCR (Unified Continuous Readiness) assessment"
+    },
+    {
+      "name": "calculate_ucr_trends",
+      "description": "Calculate UCR trends over time"
+    },
+    {
+      "name": "update_wellness_assessment",
+      "description": "Update wellness data and recalculate UCR"
+    },
+    {
+      "name": "get_activities",
+      "description": "Get recent training activities"
+    },
+    {
+      "name": "get_wellness",
+      "description": "Get wellness metrics data"
+    }
+  ]
+}

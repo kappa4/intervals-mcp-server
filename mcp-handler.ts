@@ -8,6 +8,7 @@ import { IntervalsAPIClient } from "./intervals-client.ts";
 import { UCRIntervalsClient } from "./ucr-intervals-client.ts";
 import { UCRToolHandler, UCR_TOOLS } from "./ucr-tools.ts";
 import { UCR_PROMPTS, generatePromptTemplate } from "./ucr-prompts.ts";
+import { ChatGPTToolHandler, CHATGPT_TOOLS } from "./chatgpt-tools.ts";
 import type {
   MCPRequest,
   MCPResponse,
@@ -29,6 +30,7 @@ export class MCPHandler {
   private clientInfo?: { name: string; version: string };
   private intervalsClient: IntervalsAPIClient;
   private ucrToolHandler: UCRToolHandler;
+  private chatGPTToolHandler: ChatGPTToolHandler;
   private static toolsCache?: ListToolsResponse;
   private requestTimings = new Map<string | number, number>();
 
@@ -41,8 +43,9 @@ export class MCPHandler {
       api_key: Deno.env.get("API_KEY")!,
     };
     this.ucrToolHandler = new UCRToolHandler(apiOptions);
+    this.chatGPTToolHandler = new ChatGPTToolHandler(apiOptions);
     
-    debug("MCP Handler initialized with UCR tools");
+    debug("MCP Handler initialized with UCR and ChatGPT tools");
   }
 
   async handleRequest(req: Request): Promise<Response> {
@@ -256,6 +259,9 @@ export class MCPHandler {
       return MCPHandler.toolsCache;
     }
     
+    // ChatGPT required tools first (search, fetch)
+    const chatGPTTools = CHATGPT_TOOLS;
+    
     const intervalTools = [
         {
           name: "get_activities",
@@ -410,16 +416,16 @@ export class MCPHandler {
         }
       ];
 
-    // UCRツールを追加
-    const allTools = [...intervalTools, ...UCR_TOOLS];
+    // Combine all tools: ChatGPT required tools + interval tools + UCR tools
+    const allTools = [...chatGPTTools, ...intervalTools, ...UCR_TOOLS];
     const response = { tools: allTools };
     
     // Cache the response for future use
     MCPHandler.toolsCache = response;
     
     const duration = Date.now() - startTime;
-    log("INFO", `[MCP] Generated and cached ${response.tools.length} tools in ${duration}ms (${intervalTools.length} interval + ${UCR_TOOLS.length} UCR)`);
-    debug("Returning tools list with", response.tools.length, "tools", `(${intervalTools.length} interval tools + ${UCR_TOOLS.length} UCR tools)`);
+    log("INFO", `[MCP] Generated and cached ${response.tools.length} tools in ${duration}ms (${chatGPTTools.length} ChatGPT + ${intervalTools.length} interval + ${UCR_TOOLS.length} UCR)`);
+    debug("Returning tools list with", response.tools.length, "tools", `(${chatGPTTools.length} ChatGPT + ${intervalTools.length} interval + ${UCR_TOOLS.length} UCR tools)`);
     debug("Tool names:", allTools.map(t => t.name).join(", "));
     return response;
   }
@@ -432,9 +438,16 @@ export class MCPHandler {
     try {
       let result: string;
 
+      // ChatGPTツールの処理
+      if (name === "search") {
+        const searchResult = await this.chatGPTToolHandler.search(args as any);
+        result = JSON.stringify(searchResult, null, 2);
+      } else if (name === "fetch") {
+        const fetchResult = await this.chatGPTToolHandler.fetch(args as any);
+        result = JSON.stringify(fetchResult, null, 2);
+      } 
       // UCRツールの処理
-      const ucrToolNames = UCR_TOOLS.map(tool => tool.name);
-      if (ucrToolNames.includes(name)) {
+      else if (UCR_TOOLS.map(tool => tool.name).includes(name)) {
         const ucrResult = await this.ucrToolHandler.handleTool(name, args);
         result = JSON.stringify(ucrResult, null, 2);
       } else {

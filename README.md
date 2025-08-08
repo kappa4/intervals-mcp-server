@@ -1,11 +1,13 @@
 # Intervals.icu MCP Server (TypeScript)
 
-A Model Context Protocol (MCP) server for Intervals.icu built with TypeScript and Deno Deploy.
+A Model Context Protocol (MCP) server for Intervals.icu built with TypeScript and Deno Deploy. Now with ChatGPT/OpenAI integration support.
 
 ## Features
 
 - **OAuth 2.1 Authentication** with PKCE support for Claude Desktop
 - **MCP Protocol Support** with Server-Sent Events (SSE)
+- **ChatGPT Integration** with required search/fetch tools for OpenAI connectors
+- **UCR (Unified Continuous Readiness)** assessment and trend analysis
 - **Intervals.icu API Integration** for fitness data management
 - **Deno Deploy** for reliable serverless hosting
 - **Type Safety** with full TypeScript support
@@ -13,7 +15,22 @@ A Model Context Protocol (MCP) server for Intervals.icu built with TypeScript an
 
 ## Based on Memory MCP Success Pattern
 
-This implementation follows the proven Memory MCP architecture that successfully connects with Claude.ai.
+This implementation follows the proven Memory MCP architecture that successfully connects with Claude.ai and is now extended for ChatGPT compatibility.
+
+## ChatGPT/OpenAI Support
+
+This server implements the required `search` and `fetch` tools for ChatGPT MCP connectors:
+
+- **Search Tool**: Search across activities, wellness data, and UCR assessments
+- **Fetch Tool**: Retrieve specific resources by ID or date
+- **Deep Research**: Compatible with ChatGPT Pro/Team/Enterprise Deep Research feature
+- **Remote Server**: Deployable to public URL for ChatGPT access
+
+### Supported ChatGPT Subscriptions
+- ChatGPT Pro
+- ChatGPT Team
+- ChatGPT Enterprise
+- ChatGPT Edu
 
 ## Development
 
