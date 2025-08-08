@@ -18,7 +18,7 @@ export interface SearchParams {
 }
 
 export interface FetchParams {
-  resource: "activity" | "wellness" | "ucr";
+  resource?: "activity" | "wellness" | "ucr";  // Optional, can be inferred from ID
   id: string; // Activity ID or date (YYYY-MM-DD)
 }
 
@@ -125,7 +125,13 @@ export class ChatGPTToolHandler {
    * Required tool for ChatGPT MCP connectors
    */
   async fetch(params: FetchParams): Promise<any> {
-    const { resource, id } = params;
+    const { id } = params;
+    let { resource } = params;
+
+    // If resource is not specified, infer from ID format
+    if (!resource) {
+      resource = this.inferResourceType(id);
+    }
 
     debug(`ChatGPT fetch: resource=${resource}, id=${id}`);
 
@@ -189,6 +195,18 @@ export class ChatGPTToolHandler {
     date.setDate(date.getDate() - 30);
     return date.toISOString().split('T')[0];
   }
+
+  private inferResourceType(id: string): "activity" | "wellness" | "ucr" {
+    // Check if it's a date format (YYYY-MM-DD)
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (datePattern.test(id)) {
+      // Default to wellness for date-based IDs
+      return "wellness";
+    }
+    
+    // Otherwise assume it's an activity ID
+    return "activity";
+  }
 }
 
 // Export tool definitions for MCP registration
@@ -242,7 +260,7 @@ export const CHATGPT_TOOLS = [
           description: "Resource ID (activity ID) or date (YYYY-MM-DD for wellness/UCR)"
         }
       },
-      required: ["resource", "id"]
+      required: ["id"]
     }
   }
 ];
