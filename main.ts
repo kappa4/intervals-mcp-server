@@ -17,6 +17,7 @@ import { ActivitiesHandler } from "./actions/activities-handler.ts";
 import { WellnessHandler } from "./actions/wellness-handler.ts";
 import { UCRHandler } from "./actions/ucr-handler.ts";
 import { StreamsHandler } from "./actions/streams-handler.ts";
+import { StreamsCSVHandler } from "./actions/streams-csv-handler.ts";
 import { authMiddleware } from "./actions/auth-middleware.ts";
 
 // Environment validation
@@ -81,6 +82,7 @@ const activitiesHandler = new ActivitiesHandler(intervalsClient);
 const wellnessHandler = new WellnessHandler(intervalsClient);
 const ucrHandler = new UCRHandler();
 const streamsHandler = new StreamsHandler(intervalsClient);
+const streamsCSVHandler = new StreamsCSVHandler(intervalsClient);
 
 // CORS headers for browser-based clients
 const CORS_HEADERS = {
@@ -167,8 +169,19 @@ async function handler(req: Request): Promise<Response> {
       return authMiddleware(req, (req) => activitiesHandler.getActivities(req));
     }
     
-    // Activity streams endpoint
+    // Activity streams endpoints
+    if (path.match(/^\/api\/v1\/activities\/[^\/]+\/streams\.csv\.gz$/) && req.method === "GET") {
+      // Compressed CSV format
+      return authMiddleware(req, (req) => streamsCSVHandler.getActivityStreamsCompressed(req));
+    }
+    
+    if (path.match(/^\/api\/v1\/activities\/[^\/]+\/streams\.csv$/) && req.method === "GET") {
+      // CSV format
+      return authMiddleware(req, (req) => streamsCSVHandler.getActivityStreamsCSV(req));
+    }
+    
     if (path.match(/^\/api\/v1\/activities\/[^\/]+\/streams$/) && req.method === "GET") {
+      // JSON format (default)
       return authMiddleware(req, (req) => streamsHandler.getActivityStreams(req));
     }
     
