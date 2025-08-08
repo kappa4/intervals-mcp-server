@@ -144,7 +144,8 @@ export class StreamsHandler {
   private formatStreams(streams: any, activity: any): any {
     const result: any = {
       available_streams: [],
-      statistics: {}
+      statistics: {},
+      data: {}  // Add raw data arrays
     };
 
     // Power stream
@@ -156,6 +157,7 @@ export class StreamsHandler {
         max: Math.max(...streams.watts),
         min: Math.min(...streams.watts.filter((w: number) => w > 0))
       };
+      result.data.power = streams.watts;  // Include raw power data
     }
 
     // Heart rate stream
@@ -167,6 +169,7 @@ export class StreamsHandler {
         min: Math.min(...streams.heartrate.filter((hr: number) => hr > 0)),
         zones: this.calculateHRZones(streams.heartrate, activity.icu_max_hr)
       };
+      result.data.heart_rate = streams.heartrate;  // Include raw HR data
     }
 
     // Cadence stream
@@ -180,6 +183,7 @@ export class StreamsHandler {
         max: Math.max(...streams.cadence),
         min: nonZeroCadence.length > 0 ? Math.min(...nonZeroCadence) : 0
       };
+      result.data.cadence = streams.cadence;  // Include raw cadence data
     }
 
     // Speed/Pace stream
@@ -191,6 +195,7 @@ export class StreamsHandler {
         max_kmh: Math.max(...speeds).toFixed(1),
         pace_per_km: this.speedToPace(activity.icu_median_speed)
       };
+      result.data.speed = speeds;  // Include converted speed data in km/h
     }
 
     // Altitude stream
@@ -202,6 +207,17 @@ export class StreamsHandler {
         gain: activity.icu_elevation_gain,
         loss: activity.icu_elevation_loss
       };
+      result.data.altitude = streams.altitude;  // Include raw altitude data
+    }
+
+    // Time stream (if available)
+    if (streams.time?.length > 0) {
+      result.data.time = streams.time;  // Include time indices
+    }
+
+    // Distance stream (if available)  
+    if (streams.distance?.length > 0) {
+      result.data.distance = streams.distance;  // Include distance data
     }
 
     return result;
