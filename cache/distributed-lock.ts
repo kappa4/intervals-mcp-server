@@ -12,7 +12,7 @@ export interface LockOptions {
 }
 
 export class DistributedLock {
-  private kv: Deno.Kv;
+  private kv?: Deno.Kv;
   private kvPath?: string;
 
   constructor(kvPath?: string) {
@@ -38,6 +38,7 @@ export class DistributedLock {
     options: LockOptions = {},
   ): Promise<boolean> {
     await this.initialize();
+    if (!this.kv) throw new Error("KV not initialized");
 
     const {
       ttlMs = 60000, // Default 1 minute TTL
@@ -117,6 +118,7 @@ export class DistributedLock {
    */
   async releaseLock(key: string, owner?: string): Promise<boolean> {
     await this.initialize();
+    if (!this.kv) throw new Error("KV not initialized");
 
     const lockKey = ["locks", key];
 
@@ -150,6 +152,7 @@ export class DistributedLock {
    */
   async isLocked(key: string): Promise<boolean> {
     await this.initialize();
+    if (!this.kv) throw new Error("KV not initialized");
 
     const lockKey = ["locks", key];
     const result = await this.kv.get(lockKey);

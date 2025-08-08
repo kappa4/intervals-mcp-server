@@ -207,6 +207,7 @@ export class IntervalsAPIClient {
     });
   }
 
+
   async deleteEvent(eventId: string): Promise<void> {
     await this.makeRequest(`/events/${eventId}`, {
       method: "DELETE",
