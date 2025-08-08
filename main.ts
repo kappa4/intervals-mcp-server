@@ -85,11 +85,11 @@ const streamsHandler = new StreamsHandler(intervalsClient);
 const streamsCSVHandler = new StreamsCSVHandler(intervalsClient);
 
 // CORS headers for browser-based clients
-const CORS_HEADERS = {
+export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, mcp-session-id, Accept",
-  "Access-Control-Expose-Headers": "mcp-session-id",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, mcp-session-id, Accept, X-API-Key",
+  "Access-Control-Expose-Headers": "mcp-session-id, Content-Disposition",
 };
 
 async function handler(req: Request): Promise<Response> {

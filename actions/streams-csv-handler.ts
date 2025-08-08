@@ -5,6 +5,7 @@
 
 import { IntervalsAPIClient } from "../intervals-client.ts";
 import { log, debug, warn } from "../logger.ts";
+import { CORS_HEADERS } from "../main.ts";
 
 export class StreamsCSVHandler {
   private client: IntervalsAPIClient;
@@ -30,8 +31,8 @@ export class StreamsCSVHandler {
         { 
           status: 400,
           headers: { 
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
+            ...CORS_HEADERS,
+            "Content-Type": "application/json"
           }
         }
       );
@@ -52,12 +53,10 @@ export class StreamsCSVHandler {
       return new Response(csv, {
         status: 200,
         headers: {
+          ...CORS_HEADERS,
           "Content-Type": "text/csv",
           "Content-Disposition": `attachment; filename="activity_${activityId}_streams.csv"`,
-          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
+          "Cache-Control": "public, max-age=3600" // Cache for 1 hour
         }
       });
     } catch (error) {
@@ -71,8 +70,8 @@ export class StreamsCSVHandler {
         { 
           status: 500,
           headers: { 
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
+            ...CORS_HEADERS,
+            "Content-Type": "application/json"
           }
         }
       );
@@ -200,8 +199,8 @@ export class StreamsCSVHandler {
         { 
           status: 400,
           headers: { 
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
+            ...CORS_HEADERS,
+            "Content-Type": "application/json"
           }
         }
       );
@@ -235,13 +234,11 @@ export class StreamsCSVHandler {
       return new Response(compressedData, {
         status: 200,
         headers: {
+          ...CORS_HEADERS,
           "Content-Type": "application/gzip",
           "Content-Encoding": "gzip",
           "Content-Disposition": `attachment; filename="activity_${activityId}_streams.csv.gz"`,
-          "Cache-Control": "public, max-age=3600",
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
+          "Cache-Control": "public, max-age=3600"
         }
       });
     } catch (error) {
@@ -255,8 +252,8 @@ export class StreamsCSVHandler {
         { 
           status: 500,
           headers: { 
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
+            ...CORS_HEADERS,
+            "Content-Type": "application/json"
           }
         }
       );
