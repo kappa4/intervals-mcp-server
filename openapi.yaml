@@ -142,8 +142,8 @@ paths:
   /api/v1/activities/{id}/streams:
     get:
       operationId: getActivityStreams
-      summary: Get activity streams data
-      description: Retrieve detailed time-series data for power, heart rate, cadence, speed, and altitude
+      summary: Get activity streams data (JSON)
+      description: Retrieve detailed time-series data for power, heart rate, cadence, speed, and altitude in JSON format
       parameters:
         - name: id
           in: path
@@ -172,8 +172,104 @@ paths:
                           type: string
                       statistics:
                         type: object
+                      data:
+                        type: object
+                        description: Raw time-series data arrays for each stream type
+                        properties:
+                          power:
+                            type: array
+                            items:
+                              type: number
+                          heart_rate:
+                            type: array
+                            items:
+                              type: number
+                          cadence:
+                            type: array
+                            items:
+                              type: number
+                          speed:
+                            type: array
+                            items:
+                              type: number
+                          altitude:
+                            type: array
+                            items:
+                              type: number
+                          time:
+                            type: array
+                            items:
+                              type: number
+                          distance:
+                            type: array
+                            items:
+                              type: number
                   summary:
                     type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/activities/{id}/streams.csv:
+    get:
+      operationId: getActivityStreamsCSV
+      summary: Get activity streams data (CSV)
+      description: Retrieve detailed time-series data in CSV format for efficient data transfer and analysis
+      parameters:
+        - name: id
+          in: path
+          description: Activity ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity streams data in CSV format
+          content:
+            text/csv:
+              schema:
+                type: string
+                description: CSV formatted data with headers and time-series values
+              example: |
+                # Activity: Morning Ride
+                # Type: Ride
+                # Date: 2025-01-08T10:00:00
+                # Duration: 3600 seconds
+                
+                time_seconds,power_watts,heart_rate_bpm,cadence_rpm,speed_kmh,altitude_m
+                0,200,120,85,25.5,100.0
+                1,205,121,86,25.8,100.2
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/activities/{id}/streams.csv.gz:
+    get:
+      operationId: getActivityStreamsCompressed
+      summary: Get activity streams data (Compressed CSV)
+      description: Retrieve detailed time-series data in gzip-compressed CSV format for maximum efficiency
+      parameters:
+        - name: id
+          in: path
+          description: Activity ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity streams data in compressed CSV format
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+                description: Gzip-compressed CSV data
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
