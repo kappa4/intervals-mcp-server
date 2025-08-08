@@ -4,6 +4,7 @@
  */
 
 import { log, debug, warn } from "../logger.ts";
+import { CORS_HEADERS } from "../main.ts";
 
 /**
  * Validate API key from request headers
@@ -36,7 +37,7 @@ export async function authMiddleware(
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: getCorsHeaders()
+      headers: CORS_HEADERS
     });
   }
   
@@ -51,7 +52,7 @@ export async function authMiddleware(
       {
         status: 401,
         headers: {
-          ...getCorsHeaders(),
+          ...CORS_HEADERS,
           "Content-Type": "application/json"
         }
       }
@@ -64,7 +65,7 @@ export async function authMiddleware(
     
     // Add CORS headers to the response
     const headers = new Headers(response.headers);
-    Object.entries(getCorsHeaders()).forEach(([key, value]) => {
+    Object.entries(CORS_HEADERS).forEach(([key, value]) => {
       headers.set(key, value);
     });
     
@@ -83,7 +84,7 @@ export async function authMiddleware(
       {
         status: 500,
         headers: {
-          ...getCorsHeaders(),
+          ...CORS_HEADERS,
           "Content-Type": "application/json"
         }
       }
@@ -91,14 +92,3 @@ export async function authMiddleware(
   }
 }
 
-/**
- * Get CORS headers for ChatGPT Actions
- */
-function getCorsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*", // ChatGPT needs this
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Key, x-api-key",
-    "Access-Control-Max-Age": "86400" // 24 hours
-  };
-}
