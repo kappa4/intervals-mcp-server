@@ -165,13 +165,63 @@ deno coverage coverage --lcov > coverage.lcov
 → update_wellness_assessment実行、UCR再計算
 ```
 
+## 【SHOULD】開発ツール
+
+### 高速サーバー起動スクリプト (test-server.sh)
+タイムアウト問題を解決し、3秒以内にサーバー起動を確認：
+
+```bash
+#!/bin/bash
+# Kill any existing server
+pkill -f "deno run.*main.ts" 2>/dev/null
+
+# Set environment variables (実環境では適切な値に置換)
+export ATHLETE_ID=i72555  # 本番環境では実際のIDを使用
+export API_KEY=your_api_key  # 本番環境では実際のAPIキーを使用
+export JWT_SECRET_KEY=test_jwt_secret_key_minimum_32_chars
+export ORIGIN=http://localhost:8001
+export PORT=8001
+
+# Start server with health check
+deno run --allow-net --allow-env --allow-read main.ts > server.log 2>&1 &
+SERVER_PID=$!
+
+# Wait for server (max 3 seconds)
+for i in {1..6}; do
+  if curl -s http://localhost:8001/health > /dev/null 2>&1; then
+    echo "Server is ready! PID: $SERVER_PID"
+    exit 0
+  fi
+  sleep 0.5
+done
+```
+
+### ChatGPT Actions APIテストコマンド
+```bash
+# アクティビティ取得
+curl -X GET "http://localhost:8001/api/v1/activities?days=7" \
+  -H "X-API-Key: YOUR_API_KEY" | jq '.'
+
+# UCR評価取得
+curl -X GET "http://localhost:8001/api/v1/ucr?date=2025-01-08" \
+  -H "X-API-Key: YOUR_API_KEY" | jq '.score'
+
+# ストリームデータ取得
+curl -X GET "http://localhost:8001/api/v1/activities/ACTIVITY_ID/streams" \
+  -H "X-API-Key: YOUR_API_KEY" | jq '.streams.available_streams'
+```
+
 ## 【MAY】トラブルシューティング
 
-### よくある問題
+### よくある問題と解決策
 1. **API認証エラー**: ATHLETE_ID、API_KEYの確認
 2. **OAuth設定**: ORIGIN URLとクライアント登録の確認
 3. **テストデータ不足**: intervals.icuでのウェルネスデータ蓄積
 4. **カスタムフィールド未設定**: UCRトレンド情報保存に必要
+5. **TypeScriptエラー**:
+   - メソッドバインディング: `map(this.method)` → `map(a => this.method(a))`
+   - Deno KV undefined: `private kv: Deno.Kv` → `private kv?: Deno.Kv`
+   - 重複メソッド定義: 同名メソッドの整理・削除
 
 ### デバッグコマンド
 ```bash
