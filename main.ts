@@ -13,6 +13,11 @@ import { createUnauthorizedResponse } from "./oauth/middleware.ts";
 import { MCPHandler } from "./mcp-handler.ts";
 import { WellnessCache } from "./cache/wellness-cache.ts";
 import { getWellnessCacheKey } from "./cache/cache-utils.ts";
+import { ActivitiesHandler } from "./actions/activities-handler.ts";
+import { WellnessHandler } from "./actions/wellness-handler.ts";
+import { UCRHandler } from "./actions/ucr-handler.ts";
+import { StreamsHandler } from "./actions/streams-handler.ts";
+import { authMiddleware } from "./actions/auth-middleware.ts";
 
 // Environment validation
 function validateEnvironment(): void {
@@ -71,6 +76,12 @@ try {
 // Initialize MCP handler
 const mcpHandler = new MCPHandler(intervalsClient);
 
+// Initialize ChatGPT Actions handlers
+const activitiesHandler = new ActivitiesHandler(intervalsClient);
+const wellnessHandler = new WellnessHandler(intervalsClient);
+const ucrHandler = new UCRHandler();
+const streamsHandler = new StreamsHandler(intervalsClient);
+
 // CORS headers for browser-based clients
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -99,6 +110,102 @@ async function handler(req: Request): Promise<Response> {
     return oauthResponse;
   }
 
+  // ChatGPT Actions manifest endpoint (no auth required)
+  if (path === "/.well-known/ai-plugin.json") {
+    try {
+      const manifestContent = await Deno.readTextFile("./.well-known/ai-plugin.json");
+      return new Response(manifestContent, {
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/json"
+        }
+      });
+    } catch (err) {
+      warn("Failed to serve ai-plugin.json:", err);
+      return new Response(
+        JSON.stringify({ error: "Manifest not found" }),
+        { 
+          status: 404,
+          headers: { 
+            ...CORS_HEADERS,
+            "Content-Type": "application/json" 
+          } 
+        }
+      );
+    }
+  }
+  
+  // OpenAPI specification endpoint (no auth required)
+  if (path === "/openapi.yaml") {
+    try {
+      const openapiContent = await Deno.readTextFile("./openapi.yaml");
+      return new Response(openapiContent, {
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/x-yaml"
+        }
+      });
+    } catch (err) {
+      warn("Failed to serve openapi.yaml:", err);
+      return new Response(
+        JSON.stringify({ error: "OpenAPI specification not found" }),
+        { 
+          status: 404,
+          headers: { 
+            ...CORS_HEADERS,
+            "Content-Type": "application/json" 
+          } 
+        }
+      );
+    }
+  }
+  
+  // ChatGPT Actions API endpoints
+  if (path.startsWith("/api/v1/")) {
+    // Activities endpoints
+    if (path === "/api/v1/activities" && req.method === "GET") {
+      return authMiddleware(req, (req) => activitiesHandler.getActivities(req));
+    }
+    
+    // Activity streams endpoint
+    if (path.match(/^\/api\/v1\/activities\/[^\/]+\/streams$/) && req.method === "GET") {
+      return authMiddleware(req, (req) => streamsHandler.getActivityStreams(req));
+    }
+    
+    // Activity intervals endpoint
+    if (path.match(/^\/api\/v1\/activities\/[^\/]+\/intervals$/) && req.method === "GET") {
+      return authMiddleware(req, (req) => streamsHandler.getActivityIntervals(req));
+    }
+    
+    // Wellness endpoints
+    if (path === "/api/v1/wellness" && req.method === "GET") {
+      return authMiddleware(req, (req) => wellnessHandler.getWellness(req));
+    }
+    if (path === "/api/v1/wellness/update" && req.method === "POST") {
+      return authMiddleware(req, (req) => wellnessHandler.updateWellness(req));
+    }
+    
+    // UCR endpoint
+    if (path === "/api/v1/ucr" && req.method === "GET") {
+      return authMiddleware(req, (req) => ucrHandler.getUCR(req));
+    }
+    
+    // API endpoint not found
+    return new Response(
+      JSON.stringify({ 
+        error: "Not Found",
+        message: `API endpoint ${path} not found`
+      }),
+      { 
+        status: 404,
+        headers: { 
+          ...CORS_HEADERS,
+          "Content-Type": "application/json" 
+        } 
+      }
+    );
+  }
+  
   // Health check endpoint (no auth required)
   if (path === "/health") {
     // Count available MCP tools
