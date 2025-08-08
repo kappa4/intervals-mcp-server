@@ -38,9 +38,9 @@ export class IntervalsAPIClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    // Check if endpoint already starts with /activity/ (for new endpoints)
-    const url = endpoint.startsWith('/activity/') 
-      ? `${this.baseUrl}/api/v1${endpoint}`
+    // Check if endpoint already starts with /activity/ or /api/v1/activity/ (for new endpoints)
+    const url = endpoint.startsWith('/activity/') || endpoint.startsWith('/api/v1/activity/') 
+      ? `${this.baseUrl}${endpoint.startsWith('/api/v1') ? endpoint : '/api/v1' + endpoint}`
       : `${this.baseUrl}/api/v1/athlete/${this.athleteId}${endpoint}`;
     
     const headers = {
@@ -283,7 +283,7 @@ export class IntervalsAPIClient {
       
       const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
       // Use the activity endpoint directly (not under athlete)
-      const streamArray = await this.makeRequest<Array<{type: string, data: number[]}>>(`/activity/${activityId}/streams.json${query}`);
+      const streamArray = await this.makeRequest<Array<{type: string, data: number[]}>>(`/activity/${activityId}/streams${query}`);
       
       // Convert array format to object format
       const result: ActivityStreamsResponse = {};
