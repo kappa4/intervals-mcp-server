@@ -401,7 +401,8 @@ export class UCRCalculator {
     }
 
     const averageScore = this.calculateMean(scores);
-    return ((averageScore - 1) / 4) * this.config.scoreWeights.subjective;
+    // intervals.icuでは1が最良、5が最悪なので、5から引いて反転
+    return ((5 - averageScore) / 4) * this.config.scoreWeights.subjective;
   }
 
   private convertSubjectiveData(current: WellnessData): any {
@@ -415,10 +416,10 @@ export class UCRCalculator {
     };
   }
 
-  private convertWellnessScale(icuValue: number | undefined, fieldType: string): number {
+  private convertWellnessScale(icuValue: number | undefined, fieldType: string): number | null {
     if (icuValue === undefined || icuValue === null) {
-      // データがない場合は、フィールドタイプに応じて適切なデフォルト値を返す
-      return DEFAULT_WELLNESS_VALUES[fieldType] || 3;
+      // データがない場合はnullを返す（calculateSubjectiveScoreで適切に処理される）
+      return null;
     }
     
     // 変換マップを使用して変換
