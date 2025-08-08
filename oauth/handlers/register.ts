@@ -10,7 +10,7 @@ import type {
   OAuthError 
 } from "../types.ts";
 import { ClientStorage } from "../storage/clients.ts";
-import { generateClientCredentials, CLAUDE_ALLOWED_REDIRECT_URIS, validateRedirectUri } from "../utils.ts";
+import { generateClientCredentials, ALLOWED_REDIRECT_URIS, validateRedirectUri } from "../utils.ts";
 import { log, info, warn, error } from "../../logger.ts";
 
 export function createRegistrationHandler(clientStorage: ClientStorage) {
@@ -54,16 +54,16 @@ export function createRegistrationHandler(clientStorage: ClientStorage) {
         });
       }
 
-      // Filter allowed redirect URIs
+      // Filter allowed redirect URIs (Claude + ChatGPT + dev exceptions)
       const validRedirectUris = body.redirect_uris.filter(uri => 
-        validateRedirectUri(uri, CLAUDE_ALLOWED_REDIRECT_URIS)
+        validateRedirectUri(uri, ALLOWED_REDIRECT_URIS)
       );
 
       if (validRedirectUris.length === 0) {
         const errorResponse: OAuthError = {
           error: "invalid_redirect_uri",
           error_description: "No valid redirect URIs provided. Allowed URIs: " + 
-            CLAUDE_ALLOWED_REDIRECT_URIS.join(", "),
+            ALLOWED_REDIRECT_URIS.join(", "),
         };
         return new Response(JSON.stringify(errorResponse), {
           status: 400,

@@ -118,6 +118,21 @@ export const CLAUDE_ALLOWED_REDIRECT_URIS = [
 ];
 
 /**
+ * ChatGPT Custom Connector allowed redirect URIs
+ */
+export const CHATGPT_ALLOWED_REDIRECT_URIS = [
+  "https://chatgpt.com/connector_platform_oauth_redirect",
+];
+
+/**
+ * Consolidated allowed redirect URIs across supported providers
+ */
+export const ALLOWED_REDIRECT_URIS = [
+  ...CLAUDE_ALLOWED_REDIRECT_URIS,
+  ...CHATGPT_ALLOWED_REDIRECT_URIS,
+];
+
+/**
  * OAuth configuration
  */
 export const OAUTH_CONFIG = {
