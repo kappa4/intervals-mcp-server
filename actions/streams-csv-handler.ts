@@ -29,7 +29,10 @@ export class StreamsCSVHandler {
         }),
         { 
           status: 400,
-          headers: { "Content-Type": "application/json" }
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
         }
       );
     }
@@ -51,7 +54,10 @@ export class StreamsCSVHandler {
         headers: {
           "Content-Type": "text/csv",
           "Content-Disposition": `attachment; filename="activity_${activityId}_streams.csv"`,
-          "Cache-Control": "public, max-age=3600" // Cache for 1 hour
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
         }
       });
     } catch (error) {
@@ -64,7 +70,10 @@ export class StreamsCSVHandler {
         }),
         { 
           status: 500,
-          headers: { "Content-Type": "application/json" }
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
         }
       );
     }
@@ -179,7 +188,10 @@ export class StreamsCSVHandler {
         }),
         { 
           status: 400,
-          headers: { "Content-Type": "application/json" }
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
         }
       );
     }
@@ -215,7 +227,10 @@ export class StreamsCSVHandler {
           "Content-Type": "application/gzip",
           "Content-Encoding": "gzip",
           "Content-Disposition": `attachment; filename="activity_${activityId}_streams.csv.gz"`,
-          "Cache-Control": "public, max-age=3600"
+          "Cache-Control": "public, max-age=3600",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
         }
       });
     } catch (error) {
@@ -228,7 +243,10 @@ export class StreamsCSVHandler {
         }),
         { 
           status: 500,
-          headers: { "Content-Type": "application/json" }
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
         }
       );
     }
