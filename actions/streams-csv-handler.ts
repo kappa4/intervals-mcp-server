@@ -15,13 +15,20 @@ export class StreamsCSVHandler {
   }
 
   /**
-   * Get activity streams as CSV
-   * GET /api/v1/activities/{id}/streams.csv
+   * Get activity streams as CSV with pagination support
+   * GET /api/v1/activities/{id}/streams.csv?page=1&per_page=1000
    */
   async getActivityStreamsCSV(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/');
     const activityId = pathParts[4]; // /api/v1/activities/{id}/streams.csv
+    
+    // Parse pagination parameters
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const perPage = Math.min(
+      parseInt(url.searchParams.get('per_page') || '1000'),
+      5000 // Maximum per_page limit
+    );
 
     if (!activityId) {
       return new Response(
@@ -39,7 +46,7 @@ export class StreamsCSVHandler {
     }
 
     try {
-      debug(`Getting streams CSV for activity: ${activityId}`);
+      debug(`Getting streams CSV for activity: ${activityId}, page: ${page}, per_page: ${perPage}`);
       
       // Get the activity details
       const activity = await this.client.getActivity(activityId);
@@ -47,16 +54,26 @@ export class StreamsCSVHandler {
       // Get streams data
       const streams = await this.client.getActivityStreams(activityId);
       
-      // Convert to CSV
-      const csv = this.convertStreamsToCSV(streams, activity);
+      // Convert to CSV with pagination
+      const { csv, totalRows, totalPages } = this.convertStreamsToCSVWithPagination(
+        streams, 
+        activity, 
+        page, 
+        perPage
+      );
 
       return new Response(csv, {
         status: 200,
         headers: {
           ...CORS_HEADERS,
           "Content-Type": "text/csv",
-          "Content-Disposition": `attachment; filename="activity_${activityId}_streams.csv"`,
-          "Cache-Control": "public, max-age=3600" // Cache for 1 hour
+          "Content-Disposition": `attachment; filename="activity_${activityId}_streams_page${page}.csv"`,
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+          // Pagination headers
+          "X-Total-Count": totalRows.toString(),
+          "X-Page": page.toString(),
+          "X-Per-Page": perPage.toString(),
+          "X-Total-Pages": totalPages.toString()
         }
       });
     } catch (error) {
@@ -79,11 +96,72 @@ export class StreamsCSVHandler {
   }
 
   /**
-   * Convert streams data to CSV format
+   * Convert streams data to CSV format with pagination
    */
-  private convertStreamsToCSV(streams: any, activity: any): string {
+  private convertStreamsToCSVWithPagination(
+    streams: any, 
+    activity: any, 
+    page: number, 
+    perPage: number
+  ): { csv: string; totalRows: number; totalPages: number } {
+    const { columns, dataArrays, maxLength } = this.prepareStreamData(streams);
+    
+    // Calculate pagination
+    const totalRows = maxLength;
+    const totalPages = Math.ceil(totalRows / perPage);
+    const startIndex = (page - 1) * perPage;
+    const endIndex = Math.min(startIndex + perPage, totalRows);
+    
+    // Generate CSV for the requested page
     const rows: string[] = [];
-
+    
+    // Add header row
+    rows.push(columns.join(","));
+    
+    // Add data rows for the current page only
+    for (let i = startIndex; i < endIndex; i++) {
+      const row: string[] = [];
+      for (const column of columns) {
+        const value = dataArrays[column]?.[i];
+        if (value !== undefined && value !== null) {
+          // Format numbers with appropriate precision based on data type
+          if (typeof value === 'number') {
+            if (column === 'latitude' || column === 'longitude') {
+              row.push(value.toFixed(6));
+            } else if (column === 'distance' || column === 'velocity_smooth' || column === 'grade_smooth') {
+              row.push(value.toFixed(2));
+            } else if (column === 'altitude' || column === 'temp' || column === 'watts' || column === 'watts_calc') {
+              row.push(value.toFixed(1));
+            } else if (column === 'VO2_percentage' || column === 'percentage' || column === 'smo2') {
+              row.push(value.toFixed(1));
+            } else {
+              row.push(value.toString());
+            }
+          } else {
+            row.push(value.toString());
+          }
+        } else {
+          row.push(""); // Empty value for missing data
+        }
+      }
+      rows.push(row.join(","));
+    }
+    
+    return {
+      csv: rows.join("\n"),
+      totalRows,
+      totalPages
+    };
+  }
+  
+  /**
+   * Prepare stream data for CSV conversion
+   */
+  private prepareStreamData(streams: any): {
+    columns: string[];
+    dataArrays: { [key: string]: number[] };
+    maxLength: number;
+  } {
     // Determine available data columns and map stream names to CSV headers
     const columns: string[] = [];
     const dataArrays: { [key: string]: number[] } = {};
@@ -137,18 +215,29 @@ export class StreamsCSVHandler {
       }
     }
 
+    // Find the maximum length of data
+    const maxLength = columns.length === 0 ? 0 : Math.max(
+      ...Object.values(dataArrays).map(arr => arr.length)
+    );
+    
+    return { columns, dataArrays, maxLength };
+  }
+
+  /**
+   * Convert streams data to CSV format (original method for backward compatibility)
+   */
+  private convertStreamsToCSV(streams: any, activity: any): string {
+    const { columns, dataArrays, maxLength } = this.prepareStreamData(streams);
+    
     // If no columns found, return empty CSV
     if (columns.length === 0) {
       return "";
     }
-
+    
+    const rows: string[] = [];
+    
     // Add header row
     rows.push(columns.join(","));
-
-    // Find the maximum length of data
-    const maxLength = Math.max(
-      ...Object.values(dataArrays).map(arr => arr.length)
-    );
 
     // Add data rows
     for (let i = 0; i < maxLength; i++) {
@@ -183,13 +272,20 @@ export class StreamsCSVHandler {
   }
 
   /**
-   * Get compressed activity streams as gzipped CSV
-   * GET /api/v1/activities/{id}/streams.csv.gz
+   * Get compressed activity streams as gzipped CSV with pagination support
+   * GET /api/v1/activities/{id}/streams.csv.gz?page=1&per_page=1000
    */
   async getActivityStreamsCompressed(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/');
     const activityId = pathParts[4]; // /api/v1/activities/{id}/streams.csv.gz
+    
+    // Parse pagination parameters
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const perPage = Math.min(
+      parseInt(url.searchParams.get('per_page') || '1000'),
+      5000 // Maximum per_page limit
+    );
 
     if (!activityId) {
       return new Response(
@@ -207,7 +303,7 @@ export class StreamsCSVHandler {
     }
 
     try {
-      debug(`Getting compressed streams CSV for activity: ${activityId}`);
+      debug(`Getting compressed streams CSV for activity: ${activityId}, page: ${page}, per_page: ${perPage}`);
       
       // Get the activity details
       const activity = await this.client.getActivity(activityId);
@@ -215,8 +311,13 @@ export class StreamsCSVHandler {
       // Get streams data
       const streams = await this.client.getActivityStreams(activityId);
       
-      // Convert to CSV
-      const csv = this.convertStreamsToCSV(streams, activity);
+      // Convert to CSV with pagination
+      const { csv, totalRows, totalPages } = this.convertStreamsToCSVWithPagination(
+        streams, 
+        activity, 
+        page, 
+        perPage
+      );
       
       // Compress using Web Streams API
       const encoder = new TextEncoder();
@@ -237,8 +338,13 @@ export class StreamsCSVHandler {
           ...CORS_HEADERS,
           "Content-Type": "application/gzip",
           "Content-Encoding": "gzip",
-          "Content-Disposition": `attachment; filename="activity_${activityId}_streams.csv.gz"`,
-          "Cache-Control": "public, max-age=3600"
+          "Content-Disposition": `attachment; filename="activity_${activityId}_streams_page${page}.csv.gz"`,
+          "Cache-Control": "public, max-age=3600",
+          // Pagination headers
+          "X-Total-Count": totalRows.toString(),
+          "X-Page": page.toString(),
+          "X-Per-Page": perPage.toString(),
+          "X-Total-Pages": totalPages.toString()
         }
       });
     } catch (error) {

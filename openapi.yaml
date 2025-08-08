@@ -216,8 +216,8 @@ paths:
   /api/v1/activities/{id}/streams.csv:
     get:
       operationId: getActivityStreamsCSV
-      summary: Get activity streams data (CSV)
-      description: Retrieve detailed time-series data in CSV format for efficient data transfer and analysis
+      summary: Get activity streams data (CSV) with pagination
+      description: Retrieve detailed time-series data in CSV format with pagination support for handling large datasets
       parameters:
         - name: id
           in: path
@@ -225,14 +225,48 @@ paths:
           required: true
           schema:
             type: string
+        - name: page
+          in: query
+          description: Page number (starts from 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          description: Number of data points per page
+          required: false
+          schema:
+            type: integer
+            default: 1000
+            minimum: 1
+            maximum: 5000
       responses:
         '200':
-          description: Activity streams data in CSV format
+          description: Activity streams data in CSV format with pagination headers
+          headers:
+            X-Total-Count:
+              description: Total number of data points
+              schema:
+                type: integer
+            X-Page:
+              description: Current page number
+              schema:
+                type: integer
+            X-Per-Page:
+              description: Number of data points per page
+              schema:
+                type: integer
+            X-Total-Pages:
+              description: Total number of pages
+              schema:
+                type: integer
           content:
             text/csv:
               schema:
                 type: string
-                description: CSV formatted data with headers and time-series values
+                description: CSV formatted data with headers and time-series values for the requested page
               example: |
                 time,distance,altitude,velocity_smooth,heartrate,cadence,watts,temp,latitude,longitude
                 0,0.0,100.0,25.5,120,85,200,20.0,35.681234,139.766123
@@ -248,8 +282,8 @@ paths:
   /api/v1/activities/{id}/streams.csv.gz:
     get:
       operationId: getActivityStreamsCompressed
-      summary: Get activity streams data (Compressed CSV)
-      description: Retrieve detailed time-series data in gzip-compressed CSV format for maximum efficiency
+      summary: Get activity streams data (Compressed CSV) with pagination
+      description: Retrieve detailed time-series data in gzip-compressed CSV format with pagination for maximum efficiency
       parameters:
         - name: id
           in: path
@@ -257,15 +291,49 @@ paths:
           required: true
           schema:
             type: string
+        - name: page
+          in: query
+          description: Page number (starts from 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: per_page
+          in: query
+          description: Number of data points per page
+          required: false
+          schema:
+            type: integer
+            default: 1000
+            minimum: 1
+            maximum: 5000
       responses:
         '200':
-          description: Activity streams data in compressed CSV format
+          description: Activity streams data in compressed CSV format with pagination headers
+          headers:
+            X-Total-Count:
+              description: Total number of data points
+              schema:
+                type: integer
+            X-Page:
+              description: Current page number
+              schema:
+                type: integer
+            X-Per-Page:
+              description: Number of data points per page
+              schema:
+                type: integer
+            X-Total-Pages:
+              description: Total number of pages
+              schema:
+                type: integer
           content:
             application/gzip:
               schema:
                 type: string
                 format: binary
-                description: Gzip-compressed CSV data
+                description: Gzip-compressed CSV data for the requested page
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
