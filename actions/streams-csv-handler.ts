@@ -84,60 +84,63 @@ export class StreamsCSVHandler {
    */
   private convertStreamsToCSV(streams: any, activity: any): string {
     const rows: string[] = [];
-    
-    // Add metadata as comments
-    rows.push(`# Activity: ${activity.name}`);
-    rows.push(`# Type: ${activity.type}`);
-    rows.push(`# Date: ${activity.start_date_local}`);
-    rows.push(`# Duration: ${activity.moving_time} seconds`);
-    rows.push("");
 
-    // Determine available data columns
-    const columns: string[] = ["time_seconds"];
-    const dataArrays: { [key: string]: number[] } = {
-      time_seconds: []
+    // Determine available data columns and map stream names to CSV headers
+    const columns: string[] = [];
+    const dataArrays: { [key: string]: number[] } = {};
+
+    // Map of intervals.icu stream types to CSV column names
+    const streamMapping: { [key: string]: string } = {
+      'time': 'time',
+      'latlng': 'latlng',  // Special handling needed for lat/lng pairs
+      'distance': 'distance',
+      'altitude': 'altitude',
+      'velocity_smooth': 'velocity_smooth',
+      'heartrate': 'heartrate',
+      'cadence': 'cadence',
+      'watts': 'watts',
+      'watts_calc': 'watts_calc',
+      'temp': 'temp',
+      'moving': 'moving',
+      'grade_smooth': 'grade_smooth',
+      'grade_adjusted_distance': 'grade_adjusted_distance',
+      'VO2': 'VO2',
+      'VO2_percentage': 'VO2_percentage',
+      'kcal': 'kcal',
+      'respiration': 'respiration',
+      'flow': 'flow',
+      'percentage': 'percentage',
+      'smo2': 'smo2',
+      'thb': 'thb',
+      'torque': 'torque',
+      'pace': 'pace',
+      'gap': 'gap',
+      'work': 'work',
+      'gear_ratio': 'gear_ratio',
+      'developer_field_0': 'developer_field_0',
+      'developer_field_1': 'developer_field_1',
+      'developer_field_2': 'developer_field_2'
     };
 
-    // Add time column (0 to duration)
-    const duration = activity.moving_time || 0;
-    for (let i = 0; i <= duration; i++) {
-      dataArrays.time_seconds.push(i);
+    // Process all available streams
+    for (const [streamType, columnName] of Object.entries(streamMapping)) {
+      if (streams[streamType]?.length > 0) {
+        // Special handling for latlng (array of [lat, lng] pairs)
+        if (streamType === 'latlng' && Array.isArray(streams[streamType][0])) {
+          columns.push('latitude');
+          columns.push('longitude');
+          dataArrays['latitude'] = streams[streamType].map((pair: number[]) => pair[0]);
+          dataArrays['longitude'] = streams[streamType].map((pair: number[]) => pair[1]);
+        } else {
+          columns.push(columnName);
+          dataArrays[columnName] = streams[streamType];
+        }
+      }
     }
 
-    // Add available streams
-    if (streams.watts?.length > 0) {
-      columns.push("power_watts");
-      dataArrays.power_watts = streams.watts;
-    }
-
-    if (streams.heartrate?.length > 0) {
-      columns.push("heart_rate_bpm");
-      dataArrays.heart_rate_bpm = streams.heartrate;
-    }
-
-    if (streams.cadence?.length > 0) {
-      columns.push("cadence_rpm");
-      dataArrays.cadence_rpm = streams.cadence;
-    }
-
-    if (streams.velocity_smooth?.length > 0) {
-      columns.push("speed_kmh");
-      dataArrays.speed_kmh = streams.velocity_smooth.map((v: number) => v * 3.6);
-    }
-
-    if (streams.altitude?.length > 0) {
-      columns.push("altitude_m");
-      dataArrays.altitude_m = streams.altitude;
-    }
-
-    if (streams.distance?.length > 0) {
-      columns.push("distance_m");
-      dataArrays.distance_m = streams.distance;
-    }
-
-    if (streams.temperature?.length > 0) {
-      columns.push("temperature_c");
-      dataArrays.temperature_c = streams.temperature;
+    // If no columns found, return empty CSV
+    if (columns.length === 0) {
+      return "";
     }
 
     // Add header row
@@ -154,11 +157,19 @@ export class StreamsCSVHandler {
       for (const column of columns) {
         const value = dataArrays[column]?.[i];
         if (value !== undefined && value !== null) {
-          // Format numbers with appropriate precision
-          if (column.includes("speed") || column.includes("distance")) {
-            row.push(value.toFixed(2));
-          } else if (column.includes("altitude")) {
-            row.push(value.toFixed(1));
+          // Format numbers with appropriate precision based on data type
+          if (typeof value === 'number') {
+            if (column === 'latitude' || column === 'longitude') {
+              row.push(value.toFixed(6));
+            } else if (column === 'distance' || column === 'velocity_smooth' || column === 'grade_smooth') {
+              row.push(value.toFixed(2));
+            } else if (column === 'altitude' || column === 'temp' || column === 'watts' || column === 'watts_calc') {
+              row.push(value.toFixed(1));
+            } else if (column === 'VO2_percentage' || column === 'percentage' || column === 'smo2') {
+              row.push(value.toFixed(1));
+            } else {
+              row.push(value.toString());
+            }
           } else {
             row.push(value.toString());
           }

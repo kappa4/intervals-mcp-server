@@ -234,14 +234,10 @@ paths:
                 type: string
                 description: CSV formatted data with headers and time-series values
               example: |
-                # Activity: Morning Ride
-                # Type: Ride
-                # Date: 2025-01-08T10:00:00
-                # Duration: 3600 seconds
-                
-                time_seconds,power_watts,heart_rate_bpm,cadence_rpm,speed_kmh,altitude_m
-                0,200,120,85,25.5,100.0
-                1,205,121,86,25.8,100.2
+                time,distance,altitude,velocity_smooth,heartrate,cadence,watts,temp,latitude,longitude
+                0,0.0,100.0,25.5,120,85,200,20.0,35.681234,139.766123
+                1,7.2,100.2,25.8,121,86,205,20.1,35.681245,139.766134
+                2,14.5,100.4,26.1,122,87,210,20.1,35.681256,139.766145
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
