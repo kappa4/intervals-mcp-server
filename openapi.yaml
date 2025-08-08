@@ -601,12 +601,16 @@ components:
       properties:
         score:
           type: number
+          description: Component's actual score
         weight:
           type: integer
+          description: Maximum possible score for this component (HRV=40, RHR=25, Sleep=15, Subjective=20)
         contribution:
           type: number
+          description: How much this component contributed to the total score
         status:
           type: string
+          description: Component status (Excellent, Good, Fair, Below average, Poor)
 
   responses:
     BadRequest:

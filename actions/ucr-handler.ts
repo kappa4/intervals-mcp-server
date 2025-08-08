@@ -83,31 +83,31 @@ export class UCRHandler {
       recommendation: assessment.trainingRecommendation || assessment.recommendation?.action || "",
       readiness_level: this.getReadinessLevel(assessment.score),
       
-      // Components breakdown
+      // Components breakdown (updated weights based on UCR v2 configuration)
       components: {
         hrv: {
-          score: assessment.components?.hrv?.score || 0,
+          score: assessment.components?.hrv || 0,
           weight: 40,
-          contribution: assessment.components?.hrv?.contribution || 0,
-          status: this.getComponentStatus(assessment.components?.hrv?.score)
+          contribution: assessment.components?.hrv || 0,
+          status: this.getComponentStatus(assessment.components?.hrv, 40)
         },
         rhr: {
-          score: assessment.components?.rhr?.score || 0,
-          weight: 20,
-          contribution: assessment.components?.rhr?.contribution || 0,
-          status: this.getComponentStatus(assessment.components?.rhr?.score)
+          score: assessment.components?.rhr || 0,
+          weight: 25,  // Updated from 20 to 25 (HRV double-counting correction)
+          contribution: assessment.components?.rhr || 0,
+          status: this.getComponentStatus(assessment.components?.rhr, 25)
         },
         sleep: {
-          score: assessment.components?.sleep?.score || 0,
-          weight: 20,
-          contribution: assessment.components?.sleep?.contribution || 0,
-          status: this.getComponentStatus(assessment.components?.sleep?.score)
+          score: assessment.components?.sleep || 0,
+          weight: 15,  // Updated from 20 to 15 (Garmin HRV component overlap reduction)
+          contribution: assessment.components?.sleep || 0,
+          status: this.getComponentStatus(assessment.components?.sleep, 15)
         },
         subjective: {
-          score: assessment.components?.subjective?.score || 0,
+          score: assessment.components?.subjective || 0,
           weight: 20,
-          contribution: assessment.components?.subjective?.contribution || 0,
-          status: this.getComponentStatus(assessment.components?.subjective?.score)
+          contribution: assessment.components?.subjective || 0,
+          status: this.getComponentStatus(assessment.components?.subjective, 20)
         }
       }
     };
@@ -152,10 +152,10 @@ export class UCRHandler {
   }
 
   /**
-   * Get component status
+   * Get component status based on score and max possible score
    */
-  private getComponentStatus(score: number): string {
-    const percentage = (score / 100) * 100;
+  private getComponentStatus(score: number, maxScore: number): string {
+    const percentage = (score / maxScore) * 100;
     if (percentage >= 90) return "Excellent";
     if (percentage >= 75) return "Good";
     if (percentage >= 60) return "Fair";
