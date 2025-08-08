@@ -49,13 +49,14 @@ export class UCRIntervalsClient extends IntervalsAPIClient {
   /**
    * intervals.icuの4段階評価を内部の5段階評価に変換
    */
-  private convertWellnessScale(icuValue: number | undefined, fieldType: string): number {
+  private convertWellnessScale(icuValue: number | undefined, fieldType: string): number | null {
     if (icuValue === undefined || icuValue === null) {
-      return DEFAULT_WELLNESS_VALUES[fieldType] || 3;
+      // データがない場合はnullを返す
+      return null;
     }
     
-    const conversionMap = WELLNESS_CONVERSION[fieldType];
-    return conversionMap ? conversionMap[icuValue] || 3 : 3;
+    // intervals.icuの値をそのまま返す（UCRCalculatorで変換）
+    return icuValue;
   }
 
   /**

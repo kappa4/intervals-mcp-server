@@ -422,9 +422,8 @@ export class UCRCalculator {
       return null;
     }
     
-    // 変換マップを使用して変換
-    const conversionMap = WELLNESS_CONVERSION[fieldType];
-    return conversionMap ? conversionMap[icuValue] || 3 : 3;
+    // intervals.icuの値をそのまま返す（calculateSubjectiveScoreで変換）
+    return icuValue;
   }
 
   private applyModifiers(baseScore: number, subjectiveData: any, historicalData: WellnessData[]): { finalScore: number; modifiers: UCRModifiers; multiplier: number } {
