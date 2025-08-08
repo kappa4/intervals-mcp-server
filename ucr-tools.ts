@@ -10,6 +10,7 @@ import { getErrorMessage } from "./utils/error-utils.ts";
 import type { IntervalsAPIOptions } from "./intervals-types.ts";
 import type { MCPTool } from "./mcp-types.ts";
 import type { WellnessData, UCRComponentsDetailed } from "./ucr-types.ts";
+import { UCR_COMPONENT_WEIGHTS, getComponentStatus } from "./ucr-config.ts";
 
 // UCR MCPツール定義
 export const UCR_TOOLS: MCPTool[] = [
@@ -498,23 +499,23 @@ export class UCRToolHandler {
         components: {
           hrv: {
             score: detailedComponents.hrv,
-            max_score: 40,
-            percentage: Math.round((detailedComponents.hrv / 40) * 100)
+            max_score: UCR_COMPONENT_WEIGHTS.hrv,
+            percentage: Math.round((detailedComponents.hrv / UCR_COMPONENT_WEIGHTS.hrv) * 100)
           },
           rhr: {
             score: detailedComponents.rhr,
-            max_score: 25,
-            percentage: Math.round((detailedComponents.rhr / 25) * 100)
+            max_score: UCR_COMPONENT_WEIGHTS.rhr,
+            percentage: Math.round((detailedComponents.rhr / UCR_COMPONENT_WEIGHTS.rhr) * 100)
           },
           sleep: {
             score: detailedComponents.sleep,
-            max_score: 15,
-            percentage: Math.round((detailedComponents.sleep / 15) * 100)
+            max_score: UCR_COMPONENT_WEIGHTS.sleep,
+            percentage: Math.round((detailedComponents.sleep / UCR_COMPONENT_WEIGHTS.sleep) * 100)
           },
           subjective: {
             score: detailedComponents.subjective,
-            max_score: 20,
-            percentage: Math.round((detailedComponents.subjective / 20) * 100)
+            max_score: UCR_COMPONENT_WEIGHTS.subjective,
+            percentage: Math.round((detailedComponents.subjective / UCR_COMPONENT_WEIGHTS.subjective) * 100)
           },
           objective_readiness: {
             score: detailedComponents.objectiveReadinessScore,
@@ -680,10 +681,10 @@ export class UCRToolHandler {
     
     // 各コンポーネントの寄与度を評価
     const componentScores = [
-      { name: "HRV", score: components.hrv, max: 40 },
-      { name: "RHR", score: components.rhr, max: 25 },  // HRV二重計上補正
-      { name: "睡眠", score: components.sleep, max: 15 },  // Garmin内HRV成分の重複削減
-      { name: "主観", score: components.subjective, max: 20 }
+      { name: "HRV", score: components.hrv, max: UCR_COMPONENT_WEIGHTS.hrv },
+      { name: "RHR", score: components.rhr, max: UCR_COMPONENT_WEIGHTS.rhr },
+      { name: "睡眠", score: components.sleep, max: UCR_COMPONENT_WEIGHTS.sleep },
+      { name: "主観", score: components.subjective, max: UCR_COMPONENT_WEIGHTS.subjective }
     ];
 
     componentScores.forEach(comp => {
@@ -913,27 +914,27 @@ export class UCRToolHandler {
       base_components: {
         hrv: {
           score: components.hrv,
-          max_score: 40,
+          max_score: UCR_COMPONENT_WEIGHTS.hrv,
           contribution_percentage: Math.round((components.hrv / assessment.baseScore) * 100),
-          status: this.getComponentStatus(components.hrv, 40)
+          status: getComponentStatus(components.hrv, UCR_COMPONENT_WEIGHTS.hrv)
         },
         rhr: {
           score: components.rhr,
-          max_score: 25,
+          max_score: UCR_COMPONENT_WEIGHTS.rhr,
           contribution_percentage: Math.round((components.rhr / assessment.baseScore) * 100),
-          status: this.getComponentStatus(components.rhr, 25)
+          status: getComponentStatus(components.rhr, UCR_COMPONENT_WEIGHTS.rhr)
         },
         sleep: {
           score: components.sleep,
-          max_score: 15,
+          max_score: UCR_COMPONENT_WEIGHTS.sleep,
           contribution_percentage: Math.round((components.sleep / assessment.baseScore) * 100),
-          status: this.getComponentStatus(components.sleep, 15)
+          status: getComponentStatus(components.sleep, UCR_COMPONENT_WEIGHTS.sleep)
         },
         subjective: {
           score: components.subjective,
-          max_score: 20,
+          max_score: UCR_COMPONENT_WEIGHTS.subjective,
           contribution_percentage: Math.round((components.subjective / assessment.baseScore) * 100),
-          status: this.getComponentStatus(components.subjective, 20)
+          status: getComponentStatus(components.subjective, UCR_COMPONENT_WEIGHTS.subjective)
         }
       },
       modifiers: [],
@@ -962,14 +963,6 @@ export class UCRToolHandler {
     return decomposition;
   }
 
-  private getComponentStatus(score: number, maxScore: number): string {
-    const percentage = (score / maxScore) * 100;
-    if (percentage >= 90) return "優秀";
-    if (percentage >= 75) return "良好";
-    if (percentage >= 60) return "標準";
-    if (percentage >= 40) return "低下";
-    return "要注意";
-  }
 
   private identifyPrimaryFactors(decomposition: any): any {
     const factors: any = {

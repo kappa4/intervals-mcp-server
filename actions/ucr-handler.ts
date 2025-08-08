@@ -5,6 +5,11 @@
 
 import { UCRIntervalsClient } from "../ucr-intervals-client.ts";
 import { log, debug, warn } from "../logger.ts";
+import { 
+  UCR_COMPONENT_WEIGHTS, 
+  createComponentScore, 
+  getReadinessLevel 
+} from "../ucr-config.ts";
 
 export class UCRHandler {
   private ucrClient: UCRIntervalsClient;
@@ -81,34 +86,14 @@ export class UCRHandler {
       score: Math.round(assessment.score * 10) / 10,
       interpretation: assessment.recommendation?.description || "",
       recommendation: assessment.trainingRecommendation || assessment.recommendation?.action || "",
-      readiness_level: this.getReadinessLevel(assessment.score),
+      readiness_level: getReadinessLevel(assessment.score),
       
-      // Components breakdown (updated weights based on UCR v2 configuration)
+      // Components breakdown using centralized configuration
       components: {
-        hrv: {
-          score: assessment.components?.hrv || 0,
-          weight: 40,
-          contribution: assessment.components?.hrv || 0,
-          status: this.getComponentStatus(assessment.components?.hrv, 40)
-        },
-        rhr: {
-          score: assessment.components?.rhr || 0,
-          weight: 25,  // Updated from 20 to 25 (HRV double-counting correction)
-          contribution: assessment.components?.rhr || 0,
-          status: this.getComponentStatus(assessment.components?.rhr, 25)
-        },
-        sleep: {
-          score: assessment.components?.sleep || 0,
-          weight: 15,  // Updated from 20 to 15 (Garmin HRV component overlap reduction)
-          contribution: assessment.components?.sleep || 0,
-          status: this.getComponentStatus(assessment.components?.sleep, 15)
-        },
-        subjective: {
-          score: assessment.components?.subjective || 0,
-          weight: 20,
-          contribution: assessment.components?.subjective || 0,
-          status: this.getComponentStatus(assessment.components?.subjective, 20)
-        }
+        hrv: createComponentScore(assessment.components?.hrv || 0, 'hrv'),
+        rhr: createComponentScore(assessment.components?.rhr || 0, 'rhr'),
+        sleep: createComponentScore(assessment.components?.sleep || 0, 'sleep'),
+        subjective: createComponentScore(assessment.components?.subjective || 0, 'subjective')
       }
     };
 
@@ -139,29 +124,6 @@ export class UCRHandler {
     return response;
   }
 
-  /**
-   * Get readiness level description
-   */
-  private getReadinessLevel(score: number): string {
-    if (score >= 85) return "Excellent - Ready for high intensity";
-    if (score >= 75) return "Good - Ready for normal training";
-    if (score >= 65) return "Fair - Consider moderate intensity";
-    if (score >= 55) return "Below average - Light training recommended";
-    if (score >= 45) return "Poor - Recovery focus recommended";
-    return "Very poor - Rest recommended";
-  }
-
-  /**
-   * Get component status based on score and max possible score
-   */
-  private getComponentStatus(score: number, maxScore: number): string {
-    const percentage = (score / maxScore) * 100;
-    if (percentage >= 90) return "Excellent";
-    if (percentage >= 75) return "Good";
-    if (percentage >= 60) return "Fair";
-    if (percentage >= 45) return "Below average";
-    return "Poor";
-  }
 
   /**
    * Interpret momentum value
