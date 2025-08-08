@@ -1,0 +1,21 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Intervals.icu",
+  "name_for_model": "intervals_icu",
+  "description_for_human": "Access your Intervals.icu training data, wellness metrics, and UCR assessments",
+  "description_for_model": "Plugin for accessing Intervals.icu training data, wellness metrics, and UCR (Unified Continuous Readiness) assessments. Use this to help users analyze their training, monitor wellness, and get personalized training recommendations based on their readiness scores. The plugin provides: 1) Training activities data with detailed metrics, 2) Wellness data including HRV, sleep, and subjective feelings, 3) UCR scores that combine multiple readiness factors, 4) Training recommendations based on current readiness state.",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+    "verification_tokens": {
+      "openai": "Replace_With_Verification_Token_From_ChatGPT"
+    }
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://kpnco-intervals-mcp-77.deno.dev/openapi.yaml"
+  },
+  "logo_url": "https://www.intervals.icu/assets/i_logo.png",
+  "contact_email": "support@intervals.icu",
+  "legal_info_url": "https://www.intervals.icu/terms"
+}

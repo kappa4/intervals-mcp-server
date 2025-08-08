@@ -1,0 +1,486 @@
+openapi: 3.1.0
+info:
+  title: Intervals.icu API for ChatGPT
+  description: Access your Intervals.icu training data, wellness metrics, and UCR (Unified Continuous Readiness) assessments directly through ChatGPT
+  version: 1.0.0
+  contact:
+    name: API Support
+    url: https://github.com/kappa4/intervals-mcp-server
+servers:
+  - url: https://kpnco-intervals-mcp-77.deno.dev
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/v1/activities:
+    get:
+      operationId: getActivities
+      summary: Get recent training activities
+      description: Retrieve your training activities from Intervals.icu for analysis and review
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to look back from today (1-90)
+          required: false
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 90
+        - name: type
+          in: query
+          description: Filter by activity type
+          required: false
+          schema:
+            type: string
+            enum: [Ride, Run, Swim, Walk, Workout, WeightTraining, Hike, Yoga, Other]
+      responses:
+        '200':
+          description: Successful response with activities list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Activity'
+                  count:
+                    type: integer
+                    description: Number of activities returned
+                  period:
+                    type: object
+                    properties:
+                      from:
+                        type: string
+                        format: date
+                      to:
+                        type: string
+                        format: date
+                      days:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/wellness:
+    get:
+      operationId: getWellness
+      summary: Get wellness data
+      description: Retrieve wellness metrics including HRV, RHR, sleep, and subjective feelings
+      parameters:
+        - name: date
+          in: query
+          description: Date in YYYY-MM-DD format (defaults to today)
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2025-01-08'
+      responses:
+        '200':
+          description: Successful response with wellness data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  data:
+                    $ref: '#/components/schemas/WellnessData'
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/ucr:
+    get:
+      operationId: getUCR
+      summary: Get UCR assessment
+      description: Calculate your Unified Continuous Readiness score with training recommendations
+      parameters:
+        - name: date
+          in: query
+          description: Assessment date in YYYY-MM-DD format (defaults to today)
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: include_trends
+          in: query
+          description: Include 7-day momentum and 14-day volatility analysis
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Successful UCR assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UCRAssessment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/activities/{id}/streams:
+    get:
+      operationId: getActivityStreams
+      summary: Get activity streams data
+      description: Retrieve detailed time-series data for power, heart rate, cadence, speed, and altitude
+      parameters:
+        - name: id
+          in: path
+          description: Activity ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity streams data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity_id:
+                    type: string
+                  activity_name:
+                    type: string
+                  streams:
+                    type: object
+                    properties:
+                      available_streams:
+                        type: array
+                        items:
+                          type: string
+                      statistics:
+                        type: object
+                  summary:
+                    type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/activities/{id}/intervals:
+    get:
+      operationId: getActivityIntervals
+      summary: Get activity intervals/laps
+      description: Retrieve interval or lap data with detailed metrics for each segment
+      parameters:
+        - name: id
+          in: path
+          description: Activity ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Activity intervals data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity_id:
+                    type: string
+                  activity_name:
+                    type: string
+                  intervals:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        number:
+                          type: integer
+                        name:
+                          type: string
+                        duration_formatted:
+                          type: string
+                        distance_km:
+                          type: string
+                        power:
+                          type: object
+                        heart_rate:
+                          type: object
+                  summary:
+                    type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/wellness/update:
+    post:
+      operationId: updateWellness
+      summary: Update wellness data
+      description: Update your wellness metrics and automatically recalculate UCR score
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  description: Date to update (defaults to today)
+                fatigue:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Fatigue level (1=very fresh, 5=very tired)
+                stress:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Stress level (1=very low, 5=very high)
+                mood:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Mood (1=very bad, 5=very good)
+                motivation:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Motivation (1=very low, 5=very high)
+                hrv:
+                  type: number
+                  description: Heart Rate Variability (ms)
+                rhr:
+                  type: integer
+                  description: Resting Heart Rate (bpm)
+                weight:
+                  type: number
+                  description: Body weight (kg)
+                sleep_hours:
+                  type: number
+                  description: Hours of sleep
+                sleep_quality:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: Sleep quality (1=very poor, 5=excellent)
+                calculate_ucr:
+                  type: boolean
+                  default: true
+                  description: Recalculate UCR after update
+      responses:
+        '200':
+          description: Wellness data updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  date:
+                    type: string
+                    format: date
+                  updated:
+                    type: object
+                  ucr:
+                    type: object
+                    properties:
+                      score:
+                        type: number
+                      interpretation:
+                        type: string
+                      recommendation:
+                        type: string
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Your Intervals.icu API key
+
+  schemas:
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+        duration_formatted:
+          type: string
+        distance_km:
+          type: string
+        elevation_gain:
+          type: number
+        average_power:
+          type: number
+        normalized_power:
+          type: number
+        average_hr:
+          type: integer
+        max_hr:
+          type: integer
+        training_load:
+          type: number
+        calories:
+          type: integer
+
+    WellnessData:
+      type: object
+      properties:
+        subjective:
+          type: object
+          properties:
+            fatigue:
+              type: integer
+            stress:
+              type: integer
+            mood:
+              type: integer
+            motivation:
+              type: integer
+            overall_feel:
+              type: string
+        objective:
+          type: object
+          properties:
+            hrv:
+              type: number
+            resting_hr:
+              type: integer
+            weight_kg:
+              type: number
+            sleep_hours:
+              type: number
+            sleep_quality:
+              type: integer
+
+    UCRAssessment:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        score:
+          type: number
+          description: UCR score (0-100)
+        interpretation:
+          type: string
+          description: Human-readable interpretation of the score
+        recommendation:
+          type: string
+          description: Training recommendation based on UCR
+        readiness_level:
+          type: string
+          description: Overall readiness level
+        components:
+          type: object
+          properties:
+            hrv:
+              $ref: '#/components/schemas/UCRComponent'
+            rhr:
+              $ref: '#/components/schemas/UCRComponent'
+            sleep:
+              $ref: '#/components/schemas/UCRComponent'
+            subjective:
+              $ref: '#/components/schemas/UCRComponent'
+        trends:
+          type: object
+          properties:
+            momentum_7d:
+              type: object
+            volatility_14d:
+              type: object
+            state:
+              type: object
+        training_suggestions:
+          type: array
+          items:
+            type: string
+
+    UCRComponent:
+      type: object
+      properties:
+        score:
+          type: number
+        weight:
+          type: integer
+        contribution:
+          type: number
+        status:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              details:
+                type: string
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing API key
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              details:
+                type: string
