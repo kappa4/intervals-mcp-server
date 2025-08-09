@@ -109,26 +109,92 @@ export function createComponentScore(
 }
 
 /**
+ * Modifier thresholds for subjective wellness indicators
+ * Based on intervals.icu scale: 1=best, 5=worst
+ */
+export const UCR_MODIFIER_THRESHOLDS = {
+  soreness: {
+    none: 2,      // 1-2: no penalty
+    mild: 3,      // 3: mild penalty
+    moderate: 4,  // 4: moderate penalty
+    severe: 5     // 5: severe penalty
+  },
+  motivation: {
+    high: 3,      // 1-3: no penalty
+    low: 4        // 4-5: low motivation penalty
+  },
+  injury: {
+    none: 2,      // 1-2: no cap
+    minor: 3,     // 3: cap at 70
+    moderate: 4,  // 4: cap at 50
+    severe: 5     // 5: cap at 30
+  }
+} as const;
+
+/**
+ * Penalty multipliers for various conditions
+ */
+export const UCR_PENALTIES = {
+  alcoholLight: 0.85,
+  alcoholHeavy: 0.6,
+  muscleSorenessSevere: 0.5,
+  musclesorenessModerate: 0.75,
+  sleepDebt: -15,
+  injuryModerate: -15,
+  injuryLight: -5,
+  motivationLow: 0.9
+} as const;
+
+/**
+ * Trend analysis configuration
+ */
+export const UCR_TREND_CONFIG = {
+  momentum: {
+    lookbackDays: 7,
+    thresholds: {
+      strongPositive: 10,
+      positive: 2,
+      negative: -2,
+      strongNegative: -10
+    }
+  },
+  volatility: {
+    period: 14,
+    emaAlpha: 2 / (14 + 1),
+    bollinger: {
+      period: 20,
+      stdDevMultiplier: 1.5
+    }
+  },
+  minDataPoints: 15
+} as const;
+
+/**
  * Export configuration for ucr-calculator.ts compatibility
  * This maintains backward compatibility with existing code
  */
 export const UCR_CALCULATOR_CONFIG = {
   scoreWeights: UCR_COMPONENT_WEIGHTS,
+  modifierThresholds: UCR_MODIFIER_THRESHOLDS,
+  penalties: UCR_PENALTIES,
+  trend: UCR_TREND_CONFIG,
   // Other configuration values used by ucr-calculator.ts
   hrv: {
     baselineDays: 60,
+    rollingDays: 7,
+    sensitivityFactor: 0.75,
     sigmoid: {
-      k: 1.3,
-      c: 0,
-      saturationZ: 2.5
-    },
-    sensitivityFactor: 3.5
+      k: 1.0,
+      c: -0.5,
+      saturationZ: 1.5
+    }
   },
   rhr: {
     baselineDays: 30,
+    thresholdSd: 1.0,
     linear: {
-      baseline: 12.5,
-      slope: 3.125
+      baseline: 17.5,  // 25点満点の70%ベースライン
+      slope: 7.5       // 25点満点に対応した傾き
     }
   },
   sleep: {

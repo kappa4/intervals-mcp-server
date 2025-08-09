@@ -191,6 +191,24 @@ export interface UCRConfig {
     sleep: number;
     subjective: number;
   };
+  modifierThresholds: {
+    soreness: {
+      none: number;
+      mild: number;
+      moderate: number;
+      severe: number;
+    };
+    motivation: {
+      high: number;
+      low: number;
+    };
+    injury: {
+      none: number;
+      minor: number;
+      moderate: number;
+      severe: number;
+    };
+  };
   penalties: {
     alcoholLight: number;
     alcoholHeavy: number;

@@ -27,58 +27,7 @@ import { UCR_CALCULATOR_CONFIG } from "./ucr-config.ts";
 // デフォルト設定
 // ========================================
 
-const DEFAULT_UCR_CONFIG: UCRConfig = {
-  ...UCR_CALCULATOR_CONFIG,
-  // Additional calculator-specific settings
-  hrv: {
-    ...UCR_CALCULATOR_CONFIG.hrv,
-    rollingDays: 7,
-    sensitivityFactor: 0.75,
-    sigmoid: {
-      k: 1.0,
-      c: -0.5,
-      saturationZ: 1.5
-    }
-  },
-  rhr: {
-    ...UCR_CALCULATOR_CONFIG.rhr,
-    thresholdSd: 1.0,
-    linear: {
-      baseline: 17.5,  // 25点満点の70%ベースライン
-      slope: 7.5       // 25点満点に対応した傾き
-    }
-  },
-  penalties: {
-    alcoholLight: 0.85,
-    alcoholHeavy: 0.6,
-    muscleSorenessSevere: 0.5,
-    musclesorenessModerate: 0.75,
-    sleepDebt: -15,
-    injuryModerate: -15,
-    injuryLight: -5,
-    motivationLow: 0.9
-  },
-  trend: {
-    momentum: {
-      lookbackDays: 7,
-      thresholds: {
-        strongPositive: 10,
-        positive: 2,
-        negative: -2,
-        strongNegative: -10
-      }
-    },
-    volatility: {
-      period: 14,
-      emaAlpha: 2 / (14 + 1),
-      bollinger: {
-        period: 20,
-        stdDevMultiplier: 1.5
-      }
-    },
-    minDataPoints: 15
-  }
-};
+const DEFAULT_UCR_CONFIG: UCRConfig = UCR_CALCULATOR_CONFIG;
 
 // intervals.icu wellness scale conversion (1-4 → 1-5)
 // intervals.icu: 1=good, 4=bad -> internal: 1=bad, 5=good
@@ -136,7 +85,7 @@ const TRAINING_ZONES = {
 export class UCRCalculator {
   private config: UCRConfig;
 
-  constructor(config?: Partial<UCRConfig>) {
+  constructor(config: Partial<UCRConfig> = {}) {
     this.config = { ...DEFAULT_UCR_CONFIG, ...config };
   }
 
@@ -431,8 +380,10 @@ export class UCRCalculator {
     let totalMultiplier = 1.0;
     const modifiers: UCRModifiers = {};
 
-    // 筋肉痛修正
-    if (subjectiveData.soreness === 1) {
+    // 筋肉痛修正（intervals.icu: 1=なし、5=重度）
+    const sorenessThresholds = this.config.modifierThresholds.soreness;
+    
+    if (subjectiveData.soreness >= sorenessThresholds.severe) {
       const multiplier = this.config.penalties.muscleSorenessSevere;
       totalMultiplier *= multiplier;
       modifiers.muscleSoreness = {
@@ -440,7 +391,7 @@ export class UCRCalculator {
         value: multiplier,
         reason: "Severe muscle soreness"
       };
-    } else if (subjectiveData.soreness === 2) {
+    } else if (subjectiveData.soreness >= sorenessThresholds.moderate) {
       const multiplier = this.config.penalties.musclesorenessModerate;
       totalMultiplier *= multiplier;
       modifiers.muscleSoreness = {
@@ -448,7 +399,7 @@ export class UCRCalculator {
         value: multiplier,
         reason: "Moderate muscle soreness"
       };
-    } else if (subjectiveData.soreness === 3) {
+    } else if (subjectiveData.soreness >= sorenessThresholds.mild) {
       const multiplier = 0.9;
       totalMultiplier *= multiplier;
       modifiers.muscleSoreness = {
@@ -489,8 +440,10 @@ export class UCRCalculator {
       };
     }
 
-    // モチベーション修正（内部値で判定: 1-2 = 低い）
-    if (subjectiveData.motivation <= 2) {
+    // モチベーション修正（intervals.icu: 1=高い、5=低い）
+    const motivationThresholds = this.config.modifierThresholds.motivation;
+    
+    if (subjectiveData.motivation >= motivationThresholds.low) {
       const multiplier = this.config.penalties.motivationLow;
       totalMultiplier *= multiplier;
       modifiers.motivation = {
@@ -503,22 +456,24 @@ export class UCRCalculator {
     // 修正子を適用
     finalScore *= totalMultiplier;
 
-    // ケガのハードキャップ（multiplierには含めない）
-    if (subjectiveData.injury === 1) {
+    // ケガのハードキャップ（intervals.icu: 1=なし、5=重度）
+    const injuryThresholds = this.config.modifierThresholds.injury;
+    
+    if (subjectiveData.injury >= injuryThresholds.severe) {
       finalScore = Math.min(finalScore, 30);
       modifiers.injury = {
         applied: true,
         value: 30,
         reason: "Significant injury - training not recommended"
       };
-    } else if (subjectiveData.injury === 2) {
+    } else if (subjectiveData.injury >= injuryThresholds.moderate) {
       finalScore = Math.min(finalScore, 50);
       modifiers.injury = {
         applied: true,
         value: 50,
         reason: "Moderate injury present"
       };
-    } else if (subjectiveData.injury === 3) {
+    } else if (subjectiveData.injury >= injuryThresholds.minor) {
       finalScore = Math.min(finalScore, 70);
       modifiers.injury = {
         applied: true,
