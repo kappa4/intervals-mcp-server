@@ -226,9 +226,21 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
       const dateCacheKey = getWellnessCacheKey(this.athleteId, date);
       await this.cache.delete(dateCacheKey);
       
-      // Also invalidate any date ranges that include this date
-      // This is a simple implementation - Phase 4 will have pattern-based invalidation
-      log("DEBUG", `Invalidated cache for ${date} due to wellness update`);
+      // Also invalidate date range caches that include this date
+      // UCR計算は通常60日分のデータを取得するため、関連する期間キャッシュも削除
+      const targetDate = new Date(date);
+      for (let days = 1; days <= 60; days++) {
+        const startDate = new Date(date);
+        startDate.setDate(targetDate.getDate() - days);
+        const oldest = startDate.toISOString().split('T')[0];
+        const rangeKey = getWellnessCacheKey(
+          this.athleteId,
+          formatDateRange(oldest, date)
+        );
+        await this.cache.delete(rangeKey);
+      }
+      
+      log("DEBUG", `Invalidated cache for ${date} and related date ranges due to wellness update`);
     }
 
     // Call parent implementation
