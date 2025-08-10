@@ -109,6 +109,28 @@ export function createComponentScore(
 }
 
 /**
+ * Subjective score configuration
+ * These weights and defaults are used for calculating the subjective component
+ */
+export const UCR_SUBJECTIVE_WEIGHTS = {
+  fatigue: 0.35,     // Most important (direct physical readiness indicator)
+  stress: 0.25,      // Important (affects recovery capacity)
+  motivation: 0.20,  // Important (affects training quality)
+  mood: 0.20         // Important (reflects overall mental state)
+} as const;
+
+/**
+ * Default values for subjective fields (intervals.icu scale: 1=best, 5=worst)
+ * Used when data is missing
+ */
+export const UCR_SUBJECTIVE_DEFAULTS = {
+  fatigue: 2.0,      // Slightly good (usually low fatigue)
+  stress: 2.0,       // Slightly good (usually low stress)
+  motivation: 2.0,   // Slightly high (usually motivated)
+  mood: 2.5          // Neutral to slightly good
+} as const;
+
+/**
  * Modifier thresholds for subjective wellness indicators
  * Based on intervals.icu scale: 1=best, 5=worst
  */

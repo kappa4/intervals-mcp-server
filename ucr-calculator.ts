@@ -21,7 +21,7 @@ import {
   DefaultWellnessValues,
   IntervalsIcuWellnessUpdate
 } from './ucr-types.ts';
-import { UCR_CALCULATOR_CONFIG } from "./ucr-config.ts";
+import { UCR_CALCULATOR_CONFIG, UCR_SUBJECTIVE_WEIGHTS, UCR_SUBJECTIVE_DEFAULTS } from "./ucr-config.ts";
 
 // ========================================
 // デフォルト設定
@@ -36,6 +36,7 @@ const WELLNESS_CONVERSION: WellnessConversionMap = {
   'soreness': { 1: 5, 2: 4, 3: 3, 4: 1 },     // 筋肉痛: 1=no soreness -> 5, 3=moderate -> 3, 4=very sore -> 1
   'stress': { 1: 5, 2: 4, 3: 2, 4: 1 },       // ストレス: 1=relaxed -> 5, 4=very stressed -> 1
   'motivation': { 1: 5, 2: 4, 3: 3, 4: 1 },   // モチベーション: 1=very motivated -> 5, 3=ok -> 3, 4=no motivation -> 1
+  'mood': { 1: 5, 2: 4, 3: 3, 4: 1 },         // 気分: 1=excellent -> 5, 3=ok -> 3, 4=bad -> 1
   'injury': { 1: 5, 2: 4, 3: 3, 4: 1 }        // ケガ: 1=no injury -> 5, 3=slight -> 3, 4=severe injury -> 1
 };
 
@@ -44,6 +45,7 @@ const DEFAULT_WELLNESS_VALUES: DefaultWellnessValues = {
   'soreness': 5,     // 痛みなし
   'stress': 4,       // やや良好（3→4）
   'motivation': 4,   // やや高いモチベーション
+  'mood': 3.5,       // 普通からやや良好
   'injury': 5        // ケガなし
 };
 
@@ -336,22 +338,39 @@ export class UCRCalculator {
   }
 
   private calculateSubjectiveScore(subjectiveData: any): number {
-    const scores: number[] = [];
+    // Use subjective configuration from ucr-config
     
-    if (subjectiveData.fatigue !== null && subjectiveData.fatigue !== undefined) {
-      scores.push(subjectiveData.fatigue);
+    // 各主観的指標のスコアを計算（データがない場合はデフォルト値を使用）
+    const fatigue = subjectiveData.fatigue ?? UCR_SUBJECTIVE_DEFAULTS.fatigue;
+    const stress = subjectiveData.stress ?? UCR_SUBJECTIVE_DEFAULTS.stress;
+    const motivation = subjectiveData.motivation ?? UCR_SUBJECTIVE_DEFAULTS.motivation;
+    const mood = subjectiveData.mood ?? UCR_SUBJECTIVE_DEFAULTS.mood;
+    
+    // 重み付き平均を計算
+    // intervals.icuでは1が最良、5が最悪なので、5から引いて反転してから正規化
+    const weightedSum = 
+      ((5 - fatigue) / 4) * UCR_SUBJECTIVE_WEIGHTS.fatigue +
+      ((5 - stress) / 4) * UCR_SUBJECTIVE_WEIGHTS.stress +
+      ((5 - motivation) / 4) * UCR_SUBJECTIVE_WEIGHTS.motivation +
+      ((5 - mood) / 4) * UCR_SUBJECTIVE_WEIGHTS.mood;
+    
+    // データの欠損ペナルティを計算
+    let missingDataPenalty = 0;
+    let missingCount = 0;
+    if (subjectiveData.fatigue === null || subjectiveData.fatigue === undefined) missingCount++;
+    if (subjectiveData.stress === null || subjectiveData.stress === undefined) missingCount++;
+    if (subjectiveData.motivation === null || subjectiveData.motivation === undefined) missingCount++;
+    if (subjectiveData.mood === null || subjectiveData.mood === undefined) missingCount++;
+    
+    // 欠損データがある場合は軽微なペナルティを適用（1項目あたり5%減）
+    if (missingCount > 0) {
+      missingDataPenalty = missingCount * 0.05;
     }
-    if (subjectiveData.stress !== null && subjectiveData.stress !== undefined) {
-      scores.push(subjectiveData.stress);
-    }
-
-    if (scores.length === 0) {
-      return this.config.scoreWeights.subjective * 0.5;
-    }
-
-    const averageScore = this.calculateMean(scores);
-    // intervals.icuでは1が最良、5が最悪なので、5から引いて反転
-    return ((5 - averageScore) / 4) * this.config.scoreWeights.subjective;
+    
+    // 最終スコアを計算（0-20点の範囲で）
+    const finalScore = this.config.scoreWeights.subjective * weightedSum * (1 - missingDataPenalty);
+    
+    return Math.max(0, Math.min(this.config.scoreWeights.subjective, finalScore));
   }
 
   private convertSubjectiveData(current: WellnessData): any {
@@ -360,6 +379,7 @@ export class UCRCalculator {
       soreness: this.convertWellnessScale(current.soreness, 'soreness'),
       stress: this.convertWellnessScale(current.stress, 'stress'),
       motivation: this.convertWellnessScale(current.motivation, 'motivation'),
+      mood: this.convertWellnessScale(current.mood, 'mood'),  // moodを追加
       injury: this.convertWellnessScale(current.injury, 'injury'),
       alcohol: current.alcohol || 0
     };

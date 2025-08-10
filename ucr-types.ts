@@ -20,12 +20,14 @@ export interface WellnessData {
   soreness?: number;
   stress?: number;
   motivation?: number;
+  mood?: number;
   injury?: number;
   // 内部変換後データ (1-5 scale, 1=bad, 5=good)
   fatigueConverted?: number;
   sorenessConverted?: number;
   stressConverted?: number;
   motivationConverted?: number;
+  moodConverted?: number;
   injuryConverted?: number;
   alcohol?: number; // 0=none, 1=light, 2=heavy
 }
