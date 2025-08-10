@@ -19,15 +19,19 @@ export class HRVScoreCalculator {
     hrvBaseline: BaselineData['hrv'], 
     rhrBaseline: BaselineData['rhr']
   ): number {
-    if (!currentHRV || hrvBaseline.stdDev === 0) {
+    // 互換性のため、新旧両方のプロパティ名をサポート
+    const hrvMean = hrvBaseline.mean ?? hrvBaseline.mean60;
+    const hrvStdDev = hrvBaseline.stdDev ?? hrvBaseline.sd60;
+    
+    if (!currentHRV || hrvStdDev === 0) {
       return this.config.scoreWeights.hrv * 0.5;
     }
 
     // Zスコアを計算
     const zScore = UCRStatistics.calculateZScore(
       currentHRV, 
-      hrvBaseline.mean, 
-      hrvBaseline.stdDev
+      hrvMean, 
+      hrvStdDev
     );
     
     // 副交感神経系飽和の検出
@@ -61,16 +65,35 @@ export class HRVScoreCalculator {
     rollingDays: number = 7
   ): BaselineData['hrv'] {
     if (hrvValues.length === 0) {
-      return { mean: 50, stdDev: 10, count: 0 };
+      return { 
+        mean60: 50, 
+        sd60: 10, 
+        mean7: 50,
+        dataCount: 0,
+        isValid: false,
+        mean: 50, 
+        stdDev: 10, 
+        count: 0 
+      };
     }
 
     // 直近のrollingDays分のデータを取得
     const recentValues = hrvValues.slice(-rollingDays);
     
+    const mean = UCRStatistics.calculateMean(recentValues);
+    const stdDev = UCRStatistics.calculateStdDev(recentValues);
+    const count = recentValues.length;
+    
     return {
-      mean: UCRStatistics.calculateMean(recentValues),
-      stdDev: UCRStatistics.calculateStdDev(recentValues),
-      count: recentValues.length
+      mean60: mean,
+      sd60: stdDev,
+      mean7: mean,  // 簡略化のため同じ値を使用
+      dataCount: count,
+      isValid: count > 0,
+      // エイリアスプロパティ
+      mean,
+      stdDev,
+      count
     };
   }
 }

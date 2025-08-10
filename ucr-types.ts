@@ -112,12 +112,20 @@ export interface BaselineData {
     mean7: number;      // 7日移動平均
     dataCount: number;
     isValid: boolean;
+    // リファクタリング用の互換性プロパティ（mean60とsd60のエイリアス）
+    mean?: number;      // mean60のエイリアス（新しいコード用）
+    stdDev?: number;    // sd60のエイリアス（新しいコード用）
+    count?: number;     // dataCountのエイリアス（新しいコード用）
   };
   rhr: {
     mean30: number;     // 30日平均
     sd30: number;       // 30日標準偏差
     dataCount: number;
     isValid: boolean;
+    // リファクタリング用の互換性プロパティ（mean30とsd30のエイリアス）
+    mean?: number;      // mean30のエイリアス（新しいコード用）
+    stdDev?: number;    // sd30のエイリアス（新しいコード用）
+    count?: number;     // dataCountのエイリアス（新しいコード用）
   };
 }
 

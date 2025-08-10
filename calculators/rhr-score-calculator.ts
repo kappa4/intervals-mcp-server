@@ -14,15 +14,19 @@ export class RHRScoreCalculator {
    * RHRスコアを計算
    */
   calculate(currentRHR: number, rhrBaseline: BaselineData['rhr']): number {
-    if (!currentRHR || rhrBaseline.stdDev === 0) {
+    // 互換性のため、新旧両方のプロパティ名をサポート
+    const rhrMean = rhrBaseline.mean ?? rhrBaseline.mean30;
+    const rhrStdDev = rhrBaseline.stdDev ?? rhrBaseline.sd30;
+    
+    if (!currentRHR || rhrStdDev === 0) {
       return this.config.scoreWeights.rhr * 0.5;
     }
 
     // Zスコアを計算（RHRは低い方が良いので符号を反転）
     const zScore = -UCRStatistics.calculateZScore(
       currentRHR,
-      rhrBaseline.mean,
-      rhrBaseline.stdDev
+      rhrMean,
+      rhrStdDev
     );
     
     // 線形スコアリング（改善されたモデル）
@@ -38,13 +42,30 @@ export class RHRScoreCalculator {
    */
   calculateBaseline(rhrValues: number[]): BaselineData['rhr'] {
     if (rhrValues.length === 0) {
-      return { mean: 60, stdDev: 5, count: 0 };
+      return { 
+        mean30: 60, 
+        sd30: 5, 
+        dataCount: 0,
+        isValid: false,
+        mean: 60, 
+        stdDev: 5, 
+        count: 0 
+      };
     }
 
+    const mean = UCRStatistics.calculateMean(rhrValues);
+    const stdDev = UCRStatistics.calculateStdDev(rhrValues);
+    const count = rhrValues.length;
+    
     return {
-      mean: UCRStatistics.calculateMean(rhrValues),
-      stdDev: UCRStatistics.calculateStdDev(rhrValues),
-      count: rhrValues.length
+      mean30: mean,
+      sd30: stdDev,
+      dataCount: count,
+      isValid: count > 0,
+      // エイリアスプロパティ
+      mean,
+      stdDev,
+      count
     };
   }
 }

@@ -106,8 +106,14 @@ export class UCRStatistics {
     currentRHR: number, 
     baselines: BaselineData
   ): boolean {
-    const hrvZScore = this.calculateZScore(currentHRV, baselines.hrv.mean, baselines.hrv.stdDev);
-    const rhrZScore = this.calculateZScore(currentRHR, baselines.rhr.mean, baselines.rhr.stdDev);
+    // 互換性のため、新旧両方のプロパティ名をサポート
+    const hrvMean = baselines.hrv.mean ?? baselines.hrv.mean60;
+    const hrvStdDev = baselines.hrv.stdDev ?? baselines.hrv.sd60;
+    const rhrMean = baselines.rhr.mean ?? baselines.rhr.mean30;
+    const rhrStdDev = baselines.rhr.stdDev ?? baselines.rhr.sd30;
+    
+    const hrvZScore = this.calculateZScore(currentHRV, hrvMean, hrvStdDev);
+    const rhrZScore = this.calculateZScore(currentRHR, rhrMean, rhrStdDev);
     return hrvZScore > 2.0 && rhrZScore < -1.5;
   }
 
@@ -124,11 +130,15 @@ export class UCRStatistics {
     if (dataPoints >= 60) confidence = 'high';
     else if (dataPoints >= 30) confidence = 'medium';
     
+    // 互換性のため、新旧両方のプロパティ名をサポート
+    const hrvCount = baselines.hrv.count ?? baselines.hrv.dataCount;
+    const rhrCount = baselines.rhr.count ?? baselines.rhr.dataCount;
+    
     return {
       confidence,
       quality: {
-        hrvDataPoints: baselines.hrv.count,
-        rhrDataPoints: baselines.rhr.count,
+        hrvDataPoints: hrvCount,
+        rhrDataPoints: rhrCount,
         totalDays: historical.length,
         completeness: (dataPoints / historical.length) * 100
       }
