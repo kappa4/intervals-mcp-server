@@ -68,13 +68,16 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
     
     const oldest = startDate.toISOString().split('T')[0];
     const newest = targetDate;
+    const today = new Date().toISOString().split('T')[0];
+    const isRequestingToday = newest === today;
+    
     const cacheKey = getWellnessCacheKey(
       this.athleteId, 
       formatDateRange(oldest, newest)
     );
 
-    // Try cache first if enabled
-    if (this.cacheEnabled) {
+    // Try cache first if enabled, but skip cache for today's data
+    if (this.cacheEnabled && !isRequestingToday) {
       log("DEBUG", `Checking cache for wellness data: ${oldest} to ${newest}`);
       
       const cacheResult = await this.cache.get<WellnessData[]>(cacheKey);
@@ -84,20 +87,21 @@ export class CachedUCRIntervalsClient extends UCRIntervalsClient {
       }
       
       log("DEBUG", "Cache miss, fetching from API");
+    } else if (isRequestingToday) {
+      log("DEBUG", `Skipping cache for today's data (${today}), fetching fresh from API`);
     }
 
     try {
       // Fetch from parent implementation (API)
       const data = await super.getWellnessDataForUCR(targetDate, lookbackDays);
       
-      // Cache the result if enabled
+      // Cache the result if enabled (but still cache today's data for background reference)
       if (this.cacheEnabled && data.length > 0) {
-        // Cache for 1 hour for recent data, 24 hours for older data
-        const isRecent = new Date(newest).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const ttlMs = isRecent ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+        // Cache for 1 minute for today's data (mainly for deduplication), 1 hour for recent data, 24 hours for older data
+        const ttlMs = isRequestingToday ? 60 * 1000 : (new Date(newest).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000 ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000);
         
         await this.cache.set(cacheKey, data, ttlMs);
-        log("DEBUG", `Cached wellness data with TTL ${ttlMs}ms`);
+        log("DEBUG", `Cached wellness data with TTL ${ttlMs}ms${isRequestingToday ? ' (today\'s data - will fetch fresh next time)' : ''}`);
       }
       
       return data;
