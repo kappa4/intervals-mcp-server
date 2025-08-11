@@ -26,15 +26,45 @@ export class SubjectiveScoreCalculator {
   private weights = UCR_SUBJECTIVE_WEIGHTS;
   private defaults = UCR_SUBJECTIVE_DEFAULTS;
 
-  // intervals.icu wellness scale conversion (1-5 → 1-5)
-  // intervals.icu: 1=good, 5=bad -> internal: 1=bad, 5=good
+  // intervals.icu wellness scale conversion (1-4 → 0-1 normalized)
+  // intervals.icu: 1=best, 4=worst -> normalized: 0-1 score
   private readonly WELLNESS_CONVERSION: {[key: string]: {[key: number]: number}} = {
-    'fatigue': { 1: 5, 2: 4, 3: 2, 4: 1, 5: 1 },
-    'soreness': { 1: 5, 2: 4, 3: 3, 4: 1, 5: 1 },
-    'stress': { 1: 5, 2: 4, 3: 2, 4: 1, 5: 1 },
-    'motivation': { 1: 5, 2: 4, 3: 3, 4: 1, 5: 1 },
-    'mood': { 1: 5, 2: 4, 3: 3, 4: 1, 5: 1 },
-    'injury': { 1: 5, 2: 4, 3: 3, 4: 1, 5: 1 }
+    'fatigue': { 
+      1: 1.0,   // 最良 → 100%
+      2: 0.75,  // 普通 → 75%
+      3: 0.4,   // やや悪い → 40%
+      4: 0.0    // 悪い → 0%
+    },
+    'stress': { 
+      1: 1.0,   // 最良 → 100%
+      2: 0.75,  // 普通 → 75%
+      3: 0.4,   // やや悪い → 40%
+      4: 0.0    // 悪い → 0%
+    },
+    'mood': { 
+      1: 1.0,   // 最良 → 100%
+      2: 0.85,  // 良い → 85%
+      3: 0.7,   // 普通 → 70%
+      4: 0.0    // 悪い → 0%
+    },
+    'motivation': { 
+      1: 1.0,   // 最良 → 100%
+      2: 0.85,  // 高い → 85%
+      3: 0.7,   // 普通 → 70%
+      4: 0.0    // 低い → 0%
+    },
+    'soreness': {
+      1: 0.0,   // 重度 → 0%
+      2: 0.75,  // 普通 → 75%
+      3: 0.9,   // 軽度 → 90%
+      4: 1.0    // なし → 100%
+    },
+    'injury': {
+      1: 0.0,   // 重大 → 0%
+      2: 0.3,   // 軽度 → 30%
+      3: 0.6,   // 違和感 → 60%
+      4: 1.0    // なし → 100%
+    }
   };
 
   /**
@@ -47,13 +77,18 @@ export class SubjectiveScoreCalculator {
     const motivation = subjectiveData.motivation ?? this.defaults.motivation;
     const mood = subjectiveData.mood ?? this.defaults.mood;
     
-    // 重み付き平均を計算
-    // intervals.icuでは1が最良、5が最悪なので、5から引いて反転してから正規化
+    // 変換マップを使用して正規化値を取得
+    const convertedFatigue = this.convertWellnessScale(fatigue, 'fatigue') ?? 0.75;
+    const convertedStress = this.convertWellnessScale(stress, 'stress') ?? 0.75;
+    const convertedMotivation = this.convertWellnessScale(motivation, 'motivation') ?? 0.7;
+    const convertedMood = this.convertWellnessScale(mood, 'mood') ?? 0.7;
+    
+    // 重み付き平均を計算（変換後の0-1値を使用）
     const weightedSum = 
-      ((5 - fatigue) / 4) * this.weights.fatigue +
-      ((5 - stress) / 4) * this.weights.stress +
-      ((5 - motivation) / 4) * this.weights.motivation +
-      ((5 - mood) / 4) * this.weights.mood;
+      convertedFatigue * this.weights.fatigue +
+      convertedStress * this.weights.stress +
+      convertedMotivation * this.weights.motivation +
+      convertedMood * this.weights.mood;
     
     // データの欠損ペナルティを計算
     const missingDataPenalty = this.calculateMissingDataPenalty(subjectiveData);
@@ -66,29 +101,40 @@ export class SubjectiveScoreCalculator {
 
   /**
    * ウェルネスデータを内部形式に変換
+   * NOTE: 生の値を保持（変換はcalculateメソッド内で行う）
    */
   convertSubjectiveData(current: WellnessData): SubjectiveData {
     return {
-      fatigue: this.convertWellnessScale(current.fatigue, 'fatigue'),
-      soreness: this.convertWellnessScale(current.soreness, 'soreness'),
-      stress: this.convertWellnessScale(current.stress, 'stress'),
-      motivation: this.convertWellnessScale(current.motivation, 'motivation'),
-      mood: this.convertWellnessScale(current.mood, 'mood'),
-      injury: this.convertWellnessScale(current.injury, 'injury'),
+      fatigue: current.fatigue ?? null,
+      soreness: current.soreness ?? null,
+      stress: current.stress ?? null,
+      motivation: current.motivation ?? null,
+      mood: current.mood ?? null,
+      injury: current.injury ?? null,
       alcohol: current.alcohol || 0
     };
   }
 
   /**
-   * intervals.icuスケールを内部スケールに変換
+   * intervals.icuスケール（1-4）を正規化値（0-1）に変換
    */
-  private convertWellnessScale(icuValue: number | undefined, fieldType: string): number | null {
+  private convertWellnessScale(icuValue: number | undefined | null, fieldType: string): number | null {
     if (icuValue === undefined || icuValue === null) {
       return null;
     }
     
-    // intervals.icuの値をそのまま返す（calculateメソッドで変換）
-    return icuValue;
+    const conversionMap = this.WELLNESS_CONVERSION[fieldType];
+    if (!conversionMap) {
+      // 変換マップがない場合はそのまま返す
+      return icuValue;
+    }
+    
+    // 小数点の値は四捨五入して整数にしてから変換
+    const roundedValue = Math.round(icuValue);
+    // 範囲外の値は最も近い有効な値にクリップ
+    const clippedValue = Math.max(1, Math.min(4, roundedValue));
+    
+    return conversionMap[clippedValue] ?? null;
   }
 
   /**
