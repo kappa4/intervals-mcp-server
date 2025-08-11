@@ -120,36 +120,36 @@ export const UCR_SUBJECTIVE_WEIGHTS = {
 } as const;
 
 /**
- * Default values for subjective fields (intervals.icu scale: 1=best, 5=worst)
+ * Default values for subjective fields (intervals.icu scale: 1=best, 4=worst)
  * Used when data is missing
  */
 export const UCR_SUBJECTIVE_DEFAULTS = {
-  fatigue: 2.0,      // Slightly good (usually low fatigue)
-  stress: 2.0,       // Slightly good (usually low stress)
-  motivation: 2.0,   // Slightly high (usually motivated)
-  mood: 2.5          // Neutral to slightly good
+  fatigue: 2.0,      // 普通 (usually low fatigue)
+  stress: 2.0,       // 普通 (usually low stress)
+  motivation: 3.0,   // 普通 (normal motivation)
+  mood: 3.0          // 普通 (normal mood)
 } as const;
 
 /**
  * Modifier thresholds for subjective wellness indicators
- * Based on intervals.icu scale: 1=best, 5=worst
+ * Based on intervals.icu scale: 1=best, 4=worst
  */
 export const UCR_MODIFIER_THRESHOLDS = {
   soreness: {
     none: 2,      // 1-2: no penalty
     mild: 3,      // 3: mild penalty
-    moderate: 4,  // 4: moderate penalty
-    severe: 5     // 5: severe penalty
+    moderate: 3.5, // 3.5: moderate penalty
+    severe: 4     // 4: severe penalty
   },
   motivation: {
     high: 3,      // 1-3: no penalty
-    low: 4        // 4-5: low motivation penalty
+    low: 4        // 4: low motivation penalty
   },
   injury: {
-    none: 2,      // 1-2: no cap
-    minor: 3,     // 3: cap at 70
-    moderate: 4,  // 4: cap at 50
-    severe: 5     // 5: cap at 30
+    none: 3,      // 3-4: no cap
+    minor: 2,     // 2: cap at 70
+    moderate: 1.5, // 1.5: cap at 50
+    severe: 1     // 1: cap at 30
   }
 } as const;
 
