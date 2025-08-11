@@ -55,6 +55,12 @@ export interface ModifierDetail {
 }
 
 export interface UCRModifiers {
+  alcoholPenalty?: ModifierDetail;        // アルコールペナルティ
+  muscleSorenessPenalty?: ModifierDetail; // 筋肉痛ペナルティ
+  injuryCap?: ModifierDetail;             // ケガによる上限
+  motivationPenalty?: ModifierDetail;     // モチベーションペナルティ
+  sleepDebtPenalty?: ModifierDetail;      // 睡眠負債ペナルティ
+  // 後方互換性のためのエイリアス
   alcohol?: ModifierDetail;
   muscleSoreness?: ModifierDetail;
   injury?: ModifierDetail;
@@ -64,7 +70,7 @@ export interface UCRModifiers {
 
 export interface UCRResult {
   score: number;           // 0-100
-  baseScore: number;       // 修正前スコア
+  baseScore?: number;      // 修正前スコア
   components: UCRComponents;
   modifiers?: UCRModifiers;
   multiplier?: number;     // 累積修正係数
@@ -76,10 +82,18 @@ export interface UCRResult {
     hrvDays: number;
     rhrDays: number;
     message: string;
+    isReliable?: boolean;   // データの信頼性
   };
   debugInfo?: {
     parasympatheticSaturation?: boolean;
     [key: string]: any;
+  };
+  timestamp?: string;      // 計算実行時刻
+  date?: string;           // 対象日付
+  debug?: {                // デバッグ情報（オプション）
+    baseScore: number;
+    finalScore: number;
+    config: any;
   };
 }
 
@@ -88,17 +102,17 @@ export interface UCRResult {
 // ========================================
 
 export interface TrendResult {
-  momentum: number;           // 7日間ROC (%)
-  volatility: number;         // 14日間ATR
-  volatilityLevel: 'LOW' | 'MODERATE' | 'HIGH';
-  volatilityBandPosition: number; // -2.0 to +2.0
-  trendState: string;         // 9つの状態文字列
-  trendStateCode: number;     // 1-9の数値コード
+  momentum: {value: number; category: string} | null;  // 7日間ROC (%)
+  volatility: {value: number; level: string; bandPosition: number} | null;  // 14日間ATR
+  prediction: any | null;     // 将来予測（未実装）
+  confidence: 'low' | 'medium' | 'high';  // データ信頼度
   interpretation: string;     // 27ステート解釈
+  trendState?: string;        // 9つの状態文字列
+  trendStateCode?: number;    // 1-9の数値コード
 }
 
 export interface UCRWithTrend extends UCRResult {
-  trend?: TrendResult;
+  trends?: TrendResult;  // trendsに変更（実装に合わせる）
 }
 
 // ========================================

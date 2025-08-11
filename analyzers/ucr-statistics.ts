@@ -118,9 +118,37 @@ export class UCRStatistics {
   }
 
   /**
-   * データ品質を評価
+   * データ品質を評価（新しいシグネチャ）
    */
   static evaluateDataQuality(
+    baselines: BaselineData, 
+    historical: WellnessData[]
+  ): {hrvDays: number; rhrDays: number; message: string; isReliable: boolean} {
+    // 互換性のため、新旧両方のプロパティ名をサポート
+    const hrvDays = baselines.hrv.dataCount ?? baselines.hrv.count ?? 0;
+    const rhrDays = baselines.rhr.dataCount ?? baselines.rhr.count ?? 0;
+    
+    let message = '';
+    let isReliable = false;
+    
+    if (hrvDays < 7 || rhrDays < 7) {
+      message = 'データが不足しています。最低7日分のデータが必要です。';
+      isReliable = false;
+    } else if (hrvDays < 30 || rhrDays < 30) {
+      message = 'データが少なめです。より正確な分析には30日分以上のデータが推奨されます。';
+      isReliable = true; // 7日以上あれば最低限信頼できる
+    } else {
+      message = '十分なデータがあります。';
+      isReliable = true;
+    }
+    
+    return { hrvDays, rhrDays, message, isReliable };
+  }
+  
+  /**
+   * データ品質を評価（旧シグネチャ - 後方互換性のため）
+   */
+  static evaluateDataQualityLegacy(
     baselines: BaselineData, 
     historical: WellnessData[]
   ): { confidence: string; quality: any } {
