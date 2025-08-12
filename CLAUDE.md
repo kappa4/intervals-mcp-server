@@ -213,6 +213,24 @@ curl -X GET "http://localhost:8001/api/v1/activities/ACTIVITY_ID/streams" \
 
 ## 【MAY】トラブルシューティング
 
+### 解決済みの問題（2025-08-12）
+
+#### キャッシュ問題：空データが返され続ける
+**症状**: 
+- `get_ucr_assessment`で空のHRV/主観データが60秒間固定
+- intervals.icu UIでデータ入力後も反映されない
+- `get_ucr_components`では正常動作
+
+**根本原因**:
+- 今日のデータを「キャッシュスキップ」と言いながら60秒間キャッシュ
+- 空データの検証なしでキャッシュ
+- キャッシュ制御がロジック側に分散
+
+**解決策**: ストラテジーパターン適用
+- `cache/today-data-cache-strategy.ts`: 5秒TTL、空データ検証
+- `ucr-intervals-client-cached-v2.ts`: DI対応
+- 詳細は `docs/CACHE_STRATEGY_GUIDE.md` 参照
+
 ### よくある問題と解決策
 1. **API認証エラー**: ATHLETE_ID、API_KEYの確認
 2. **OAuth設定**: ORIGIN URLとクライアント登録の確認
