@@ -326,16 +326,20 @@ export class UCRCalculatorRefactored {
       modifiers.alcoholPenalty = { applied: true, value: UCR_PENALTIES.alcoholHeavy, reason: '過度の飲酒' };
     }
 
-    // 筋肉痛ペナルティ（intervals.icuでは高い値が悪い状態）
+    // 筋肉痛修正因子（intervals.icuスケール: 1=最良, 4=最悪）
     if (subjectiveData.soreness !== null && subjectiveData.soreness !== undefined) {
       const soreness = subjectiveData.soreness;
-      if (soreness >= UCR_MODIFIER_THRESHOLDS.soreness.severe) {  // 5: 重度
+      if (soreness >= UCR_MODIFIER_THRESHOLDS.soreness.severe) {  // 4: 重度（最悪）
         multiplier *= UCR_PENALTIES.muscleSorenessSevere;
         modifiers.muscleSorenessPenalty = { applied: true, value: UCR_PENALTIES.muscleSorenessSevere, reason: '重度の筋肉痛' };
-      } else if (soreness >= UCR_MODIFIER_THRESHOLDS.soreness.moderate) {  // 4: 中程度
-        multiplier *= UCR_PENALTIES.musclesorenessModerate;
-        modifiers.muscleSorenessPenalty = { applied: true, value: UCR_PENALTIES.musclesorenessModerate, reason: '中程度の筋肉痛' };
+      } else if (soreness >= UCR_MODIFIER_THRESHOLDS.soreness.moderate) {  // 3: 普通
+        multiplier *= UCR_PENALTIES.muscleSorenessModerate;
+        modifiers.muscleSorenessPenalty = { applied: true, value: UCR_PENALTIES.muscleSorenessModerate, reason: '普通の筋肉痛' };
+      } else if (soreness >= UCR_MODIFIER_THRESHOLDS.soreness.mild) {  // 2: 軽度
+        multiplier *= UCR_PENALTIES.muscleSorenessMild;
+        modifiers.muscleSorenessPenalty = { applied: true, value: UCR_PENALTIES.muscleSorenessMild, reason: '軽度の筋肉痛' };
       }
+      // soreness == 1 (なし) の場合はペナルティなし (multiplier = 1.0)
     }
 
     // モチベーションペナルティ
