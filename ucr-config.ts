@@ -136,10 +136,10 @@ export const UCR_SUBJECTIVE_DEFAULTS = {
  */
 export const UCR_MODIFIER_THRESHOLDS = {
   soreness: {
-    none: 2,      // 1-2: no penalty
-    mild: 3,      // 3: mild penalty
-    moderate: 3.5, // 3.5: moderate penalty
-    severe: 4     // 4: severe penalty
+    none: 1,      // 1: なし（最良） - no penalty
+    mild: 2,      // 2: 軽度 - mild penalty
+    moderate: 3,  // 3: 普通 - moderate penalty
+    severe: 4     // 4: 重度（最悪） - severe penalty
   },
   motivation: {
     high: 3,      // 1-3: no penalty
@@ -159,8 +159,10 @@ export const UCR_MODIFIER_THRESHOLDS = {
 export const UCR_PENALTIES = {
   alcoholLight: 0.85,
   alcoholHeavy: 0.6,
-  muscleSorenessSevere: 0.5,
-  musclesorenessModerate: 0.75,
+  muscleSorenessNone: 1.0,     // 1: なし（最良） → 100%
+  muscleSorenessMild: 0.9,     // 2: 軽度 → 90%
+  muscleSorenessModerate: 0.75, // 3: 普通 → 75%
+  muscleSorenessSevere: 0.5,    // 4: 重度（最悪） → 50%
   sleepDebt: -15,
   injuryModerate: -15,
   injuryLight: -5,
